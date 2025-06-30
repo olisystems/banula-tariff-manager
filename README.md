@@ -142,3 +142,13 @@ For detailed integration steps, refer to the [OCPI Documentation](https://github
 ## License
 
 Apache License 2.0
+
+## Author
+
+<b>OLI Systems GmbH</b>
+
+Contributors:
+
+- [Matheus Rosendo](https://github.com/matheusrosendo) 
+- [Diego Rosales](https://github.com/dv-rosales)
+- [Elton Saraci](https://github.com/EltonSaraci99)
