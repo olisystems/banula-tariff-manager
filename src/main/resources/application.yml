@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  main:
+    headless: true
+  profiles:
+    active: ${ENVIRONMENT:local}
+  data:
+    mongodb:
+      username: ${MONGO_USER:}
+      password: ${MONGO_PASSWORD:}
+      database: ${MONGO_ENV:}
+      host: ${MONGO_ADDRESS:}
+
+party:
+  private-key: ${TARIFF_MANAGER_PRIVATE_KEY:}
+  url: ${TARIFF_MANAGER_URL:https://banula-dev.oli-system.com}
+  api-prefix: ${TARIFF_MANAGER_API_PREFIX:/tariff-manager/ocpi/other}
+  api-non-ocpi-prefix: ${TARIFF_MANAGER_API_NON_OCPI_PREFIX:/tariff-manager/non-ocpi/other}
+  role: OTHER
+  log-payload: ${TARIFF_MANAGER_LOG_PAYLOAD:false}
+  collection-prefix: "TariffManager_"
+
+platform:
+  url: ${PLATFORM_URL:}
+  party-id: ${PLATFORM_PARTY_ID:}
+  country-code: ${PLATFORM_COUNTRY_CODE:}
+
+hashing-service:
+  url: ${HASHING_SERVICE_URL:}
+
+springdoc:
+  swagger-ui:
+    path: /tariff-manager/non-ocpi/other/swagger-ui
+    enabled: true
+  api-docs:
+    path: /tariff-manager/non-ocpi/other/api-docs
+    enabled: true
