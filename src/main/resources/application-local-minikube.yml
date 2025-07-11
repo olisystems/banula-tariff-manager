@@ -1,0 +1,20 @@
+server:
+  port: 8087
+# configuration to access resources in local cluster minikube
+
+spring:
+  data:
+    mongodb:
+      host: localhost
+      username: banula_local
+      password: minikube
+      database: banula_local
+      port: 27017
+
+party:
+  charging-period-interval-in-seconds: 15
+
+platform:
+  url: http://localhost:8184/platform-platformban
+  party-id: LON
+  country-code: BR
