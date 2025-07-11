@@ -40,7 +40,6 @@ spring:
       host: ${MONGO_ADDRESS:}
 
 party:
-  private-key: ${TARIFF_MANAGER_PRIVATE_KEY:}
   url: ${TARIFF_MANAGER_URL:}
   api-prefix: ${TARIFF_MANAGER_API_PREFIX:/tariff-manager/ocpi/other}
   tokenB: ${TARIFF_MANAGER_TOKEN_B:}
@@ -81,7 +80,6 @@ springdoc:
 4. **OCN Node Configuration**:
    - `ocn-node.url`: URL of your OCN node
    - `ocn-node.admin-key`: Admin key for OCN node access
-   - `party.private-key`: Your private key for signing OCN messages
    - `ocn-node.signing-supported`: Set to true if using signed messages
 
 ## Building and Running
@@ -132,7 +130,6 @@ For detailed integration steps, refer to the [OCPI Documentation](https://github
 
 - **Authentication failures**:
   - Verify your tokens and credentials
-  - Check the `tokenB` and `private-key` values
 
 - **OCN handshake errors**:
   - Ensure OCN node URL and credentials are correct

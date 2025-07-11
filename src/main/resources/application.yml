@@ -14,7 +14,6 @@ spring:
       host: ${MONGO_ADDRESS:}
 
 party:
-  private-key: ${TARIFF_MANAGER_PRIVATE_KEY:}
   url: ${TARIFF_MANAGER_URL:}
   api-prefix: ${TARIFF_MANAGER_API_PREFIX:/tariff-manager/ocpi/other}
   api-non-ocpi-prefix: ${TARIFF_MANAGER_API_NON_OCPI_PREFIX:/tariff-manager/non-ocpi/other}
