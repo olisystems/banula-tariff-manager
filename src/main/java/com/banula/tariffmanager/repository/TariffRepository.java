@@ -15,13 +15,10 @@ public interface TariffRepository extends MongoRepository<OnChainTariff, String>
     {
       'countryCode': ?0,
       'partyId': ?1,
-      '$or': [
-        { 'id': ?2 },
-        { '_id': ?2 }
-      ]
+      'id': ?2
     }
         """)
-    Optional<OnChainTariff> findByCompositeKey(String countryCode, String partyId, String tariff);
+    Optional<OnChainTariff> findByCompositeKey(String countryCode, String partyId, String ocpiTariffId);
 
     @Query("{'partyId': ?0, 'countryCode': ?1, 'publishedAt': {$lte: ?2}}")
     List<OnChainTariff> findLatestTariffForPartyAtOrderByPublishedAt(String partyId, String countryCode,
