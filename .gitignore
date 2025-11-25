@@ -36,3 +36,4 @@ build/
 .idea/
 .mvn/
 mvnw*
+start.sh

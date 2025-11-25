@@ -9,7 +9,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
 
-import com.banula.openlib.ocpi.platform.PlatformClient;
 import com.banula.openlib.ocpi.util.InfoUtils;
 
 @Component
@@ -17,16 +16,12 @@ import com.banula.openlib.ocpi.util.InfoUtils;
 @Slf4j
 public class StartupApplicationListener implements ApplicationListener<ApplicationReadyEvent> {
     private final ApplicationConfiguration applicationConfiguration;
-    private final PlatformClient platformClient;
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         try {
             log.info("Changed default time zone to  {} ", TimeZone.getDefault().getDisplayName());
             log.info("Open library version: {}", InfoUtils.getLibVersion("com.my-oli", "banula-open-library"));
-            platformClient.updateOcnVersionDetailsFromPlatform();
-            log.info("OCN version details retrieved from Platform: {} endpoints",
-                    applicationConfiguration.getOcnVersionDetails().getEndpoints().size());
             log.info("My OCPI URL: {}{} | port: {}", applicationConfiguration.getBackendUrl(),
                     applicationConfiguration.getApiPrefix(),
                     event.getApplicationContext().getEnvironment().getProperty("server.port"));
