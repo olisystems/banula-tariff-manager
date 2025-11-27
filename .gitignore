@@ -36,4 +36,7 @@ build/
 .idea/
 .mvn/
 mvnw*
+
+# start and stop scripts
 start.sh
+stop.sh
