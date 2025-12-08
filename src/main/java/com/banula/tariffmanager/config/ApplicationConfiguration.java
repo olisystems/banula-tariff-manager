@@ -1,6 +1,10 @@
 package com.banula.tariffmanager.config;
 
 import lombok.Getter;
+import lombok.Setter;
+
+import java.util.HashMap;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +16,7 @@ import com.banula.openlib.ocpi.platform.PlatformConfiguration;
 @Configuration
 @EnableConfigurationProperties
 @Getter
+@Setter
 public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${party.url}")
     private String backendUrl;
@@ -41,10 +46,14 @@ public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${platform.country-code}")
     private String countryCode;
 
-    private OcnVersionDetails ocnVersionDetails;
+    private HashMap<String, OcnVersionDetails> ocnVersionDetails;
 
-    public void setOcnVersionDetails(OcnVersionDetails ocnVersionDetails) {
-        this.ocnVersionDetails = ocnVersionDetails;
+    @Override
+    public void setOcnVersionDetails(String tenantId, OcnVersionDetails _ocnVersionDetails) {
+        if (this.ocnVersionDetails == null) {
+            this.ocnVersionDetails = new HashMap<String, OcnVersionDetails>();
+        }
+        this.ocnVersionDetails.put(tenantId, _ocnVersionDetails);
     }
 
 }
