@@ -11,7 +11,7 @@ spring:
       database: banula_local
       port: 27017
 
-party:
+api:
   charging-period-interval-in-seconds: 15
 
 platform:

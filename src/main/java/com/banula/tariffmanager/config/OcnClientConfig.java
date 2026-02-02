@@ -20,8 +20,7 @@ public class OcnClientConfig {
 
     @Bean
     public OcnClient myOcnClientConfig() {
-        String backendUrl = applicationConfiguration.getBackendUrl() + applicationConfiguration.getApiPrefix()
-                + "/2.2.1/versions";
+        String backendUrl = applicationConfiguration.getBackendUrl() + "/api/v1/internal/ocpi/2.2.1/versions";
         return new OcnClientBuilder()
                 .setFrom(applicationConfiguration.getCountryCode(), applicationConfiguration.getPartyId())
                 .setTo(applicationConfiguration.getCountryCode(), applicationConfiguration.getPartyId())

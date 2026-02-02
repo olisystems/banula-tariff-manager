@@ -13,10 +13,8 @@ spring:
       database: ${MONGO_ENV:}
       host: ${MONGO_ADDRESS:}
 
-party:
+api:
   url: ${TARIFF_MANAGER_URL:}
-  api-prefix: ${TARIFF_MANAGER_API_PREFIX:/tariff-manager/ocpi/other}
-  api-non-ocpi-prefix: ${TARIFF_MANAGER_API_NON_OCPI_PREFIX:/tariff-manager/non-ocpi/other}
   role: OTHER
   log-payload: ${TARIFF_MANAGER_LOG_PAYLOAD:false}
   collection-prefix: "TariffManager_"
@@ -31,8 +29,8 @@ hashing-service:
 
 springdoc:
   swagger-ui:
-    path: /tariff-manager/non-ocpi/other/swagger-ui
+    path: /swagger-ui
     enabled: true
   api-docs:
-    path: /tariff-manager/non-ocpi/other/api-docs
+    path: /api-docs
     enabled: true

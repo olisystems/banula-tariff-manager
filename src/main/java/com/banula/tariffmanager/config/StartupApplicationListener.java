@@ -22,11 +22,11 @@ public class StartupApplicationListener implements ApplicationListener<Applicati
         try {
             log.info("Changed default time zone to  {} ", TimeZone.getDefault().getDisplayName());
             log.info("Open library version: {}", InfoUtils.getLibVersion("com.my-oli", "banula-open-library"));
-            log.info("My OCPI URL: {}{} | port: {}", applicationConfiguration.getBackendUrl(),
-                    applicationConfiguration.getApiPrefix(),
+            log.info("My OCPI endpoints: {}/api/v1/internal/ocpi/2.2.1/* | port: {}",
+                    applicationConfiguration.getBackendUrl(),
                     event.getApplicationContext().getEnvironment().getProperty("server.port"));
-            log.info("My Non-OCPI URL: {}{} | port: {}", applicationConfiguration.getBackendUrl(),
-                    applicationConfiguration.getApiNonOcpiPrefix(),
+            log.info("Health endpoint: {}/health | port: {}",
+                    applicationConfiguration.getBackendUrl(),
                     event.getApplicationContext().getEnvironment().getProperty("server.port"));
         } catch (Exception ex) {
             log.error(String.format("Error on application startup: %s", ex.getLocalizedMessage()));

@@ -28,7 +28,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping("${party.api-prefix}/2.2.1/tariffs")
+@RequestMapping("/api/v1/internal/ocpi/2.2.1/tariffs")
 @Tag(name = "TMTariffs")
 @AllArgsConstructor
 @Slf4j
