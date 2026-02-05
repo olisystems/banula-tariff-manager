@@ -30,7 +30,7 @@ hashing-service:
 springdoc:
   swagger-ui:
     path: /swagger-ui
-    enabled: true
+    enabled: ${SWAGGER_ENABLED:true}
   api-docs:
     path: /api-docs
-    enabled: true
+    enabled: ${SWAGGER_ENABLED:true}
