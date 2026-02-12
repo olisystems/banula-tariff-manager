@@ -1,4 +1,0 @@
-api:
-  # url: http://localhost:8087  for local ocn outside minikube
-  # url: http://host.minikube.internal:8087 for ocn inside minikube
-  url: http://localhost:8087
