@@ -31,6 +31,13 @@ public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${api.collection-prefix}")
     private String collectionPrefix;
 
+    @Value("${api.log-curl-command}")
+    private boolean logCurlCommand;
+
+    public boolean isToLogCurlCommands() {
+        return logCurlCommand;
+    }
+
     @Value("${platform.url}")
     private String platformUrl;
 

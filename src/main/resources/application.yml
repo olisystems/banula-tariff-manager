@@ -18,6 +18,7 @@ api:
   role: OTHER
   log-payload: ${TARIFF_MANAGER_LOG_PAYLOAD:false}
   collection-prefix: "TariffManager_"
+  log-curl-command: ${TARIFF_MANAGER_LOG_CURL_COMMAND:false}
 
 platform:
   url: ${PLATFORM_URL:}
