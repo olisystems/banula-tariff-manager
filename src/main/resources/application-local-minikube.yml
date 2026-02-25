@@ -17,4 +17,4 @@ api:
 platform:
   url: http://localhost:8184
   party-id: BAN
-  country-code: BR
+  country-code: DE
