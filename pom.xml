@@ -105,6 +105,10 @@
             <artifactId>banula-open-library</artifactId>
             <version>0.1.26</version>
         </dependency>
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+		</dependency>
 		 
 	</dependencies>
 	
