@@ -44,4 +44,4 @@ stop.sh
 local
 
 # macOS
-.DS_Store
+**/.DS_Store
