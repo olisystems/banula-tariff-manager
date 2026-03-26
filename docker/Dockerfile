@@ -1,8 +1,4 @@
-#FROM adoptopenjdk/openjdk11:alpine
-FROM openjdk:17-oracle
-
-# Install libstdc++
-RUN microdnf update -y && microdnf install -y libstdc++
+FROM amazoncorretto:17.0.12-al2023-headless
 
 WORKDIR /app
 

@@ -1,4 +1,4 @@
-application-local.yml
+application-*-custom.yml
 
 HELP.md
 target/
@@ -40,3 +40,8 @@ mvnw*
 # start and stop scripts
 start.sh
 stop.sh
+
+local
+
+# macOS
+**/.DS_Store

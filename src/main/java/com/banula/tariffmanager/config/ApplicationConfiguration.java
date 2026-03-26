@@ -18,24 +18,25 @@ import com.banula.openlib.ocpi.platform.PlatformConfiguration;
 @Getter
 @Setter
 public class ApplicationConfiguration implements PlatformConfiguration {
-    @Value("${party.url}")
+    @Value("${api.url}")
     private String backendUrl;
 
-    @Value("${party.api-prefix}")
-    private String apiPrefix;
-
-    @Value("${party.api-non-ocpi-prefix}")
-    private String apiNonOcpiPrefix;
-
-    @Value("${party.role}")
+    @Value("${api.role}")
     private Role role;
 
     // Hashing service
     @Value("${hashing-service.url}")
     private String HashingServiceUrl;
 
-    @Value("${party.collection-prefix}")
+    @Value("${api.collection-prefix}")
     private String collectionPrefix;
+
+    @Value("${api.log-curl-command}")
+    private boolean logCurlCommand;
+
+    public boolean isToLogCurlCommands() {
+        return logCurlCommand;
+    }
 
     @Value("${platform.url}")
     private String platformUrl;
