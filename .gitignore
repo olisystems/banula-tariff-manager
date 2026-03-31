@@ -38,8 +38,7 @@ build/
 mvnw*
 
 # start and stop scripts
-start.sh
-stop.sh
+
 
 local
 
