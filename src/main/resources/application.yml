@@ -20,6 +20,12 @@ api:
   collection-prefix: "TariffManager_"
   log-curl-command: ${TARIFF_MANAGER_LOG_CURL_COMMAND:false}
 
+# When require-energy-mix is true, PUT /tariffs only persists tariffs whose energy_mix has
+# is_green_energy true and energy_product_name equal to energy-product-name.
+feature-flags:
+  require-energy-mix: ${TARIFF_MANAGER_REQUIRE_ENERGY_MIX:false}
+  energy-product-name: ${TARIFF_MANAGER_ENERGY_PRODUCT_NAME:BANULA_CPO_TARIFF}
+
 platform:
   url: ${PLATFORM_URL:}
   party-id: ${PLATFORM_PARTY_ID:}

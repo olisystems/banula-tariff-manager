@@ -29,4 +29,8 @@ eval export JAVA_HOME=$(cat local/javaHome.md | head -n 1 | tr -d '[:space:]')
 export MAVEN_OPTS="-Duser.timezone=UTC"
 
 # Start the application with Maven
-./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local,local-custom"
+if [ -x "./mvnw" ]; then
+  ./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local,local-custom"
+else
+  mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local,local-custom"
+fi
