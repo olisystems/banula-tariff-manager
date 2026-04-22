@@ -34,6 +34,12 @@ public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${api.log-curl-command}")
     private boolean logCurlCommand;
 
+    @Value("${feature-flags.require-energy-mix:false}")
+    private boolean requireEnergyMix;
+
+    @Value("${feature-flags.energy-product-name:BANULA_CPO_TARIFF}")
+    private String energyProductName;
+
     public boolean isToLogCurlCommands() {
         return logCurlCommand;
     }
