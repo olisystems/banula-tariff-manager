@@ -12,6 +12,7 @@ spring:
       password: ${MONGO_PASSWORD:}
       database: ${MONGO_ENV:}
       host: ${MONGO_ADDRESS:}
+      auto-index-creation: true
 
 api:
   url: ${TARIFF_MANAGER_URL:}
