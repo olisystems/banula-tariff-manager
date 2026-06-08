@@ -1,0 +1,11 @@
+apiVersion: v2
+name: tariff-manager
+description: Banula Tariff Manager
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: oli-app
+    version: "1.4.x"
+    repository: "oci://ghcr.io/olisystems/charts"

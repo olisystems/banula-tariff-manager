@@ -1,0 +1,19 @@
+oli-app:
+  fullnameOverride: "tariff-manager-int"
+  image:
+    tag: ""
+  ingress:
+    hosts:
+      - host: banula-int.oli-system.com
+    tls:
+      - secretName: banula-int-tls
+        hosts:
+          - banula-int.oli-system.com
+    features:
+      router:
+        routes:
+          exposeAll: true
+  env:
+    ENVIRONMENT: "int"
+    SPRING_PROFILE: "int"
+    TARIFF_MANAGER_URL: "https://banula-int.oli-system.com/tariff-manager"

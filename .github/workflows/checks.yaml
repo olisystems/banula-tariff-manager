@@ -1,0 +1,26 @@
+name: Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: self-hosted
+
+    steps:
+      - name: Setup Java and Maven
+        uses: olisystems/actions/java/setup@main
+        with:
+          gh-packages-username: ${{ secrets.GH_PACKAGES_USERNAME }}
+          gh-packages-token: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+      - name: Build and test
+        run: mvn clean verify

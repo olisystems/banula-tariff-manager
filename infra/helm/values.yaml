@@ -1,0 +1,103 @@
+oli-app:
+  replicaCount: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 45
+
+  image:
+    repository: "swr.eu-de.otc.t-systems.com/oli_banula/tariff-manager"
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  imagePullSecrets:
+    - name: default-secret
+
+  service:
+    name: banula-tariff-manager-service
+    type: ClusterIP
+    port: 80
+    containerPort: 8080
+
+  ingress:
+    enabled: true
+    className: "nginx"
+    features:
+      certManager:
+        enabled: false
+      sslRedirect:
+        enabled: true
+      rateLimiting:
+        enabled: true
+        rpm: 300
+        connections: 10
+      proxySettings:
+        enabled: true
+        bodySize: "8m"
+        bufferSize: "32k"
+      router:
+        enabled: true
+        prefix: "/tariff-manager"
+        stripPrefix: true
+        routes:
+          exposeCommon: false
+          exposeAll: false
+
+  env:
+    SERVER_CONTEXT_PATH: "/tariff-manager"
+    TARIFF_MANAGER_LOG_PAYLOAD: "true"
+    PLATFORM_COUNTRY_CODE: "DE"
+    PLATFORM_PARTY_ID: "BAN"
+    PLATFORM_URL: "http://platform-deban-service"
+    HASHING_SERVICE_URL: "https://hashing-api.de/api"
+    MONGO_USER:
+      secretKeyRef:
+        name: mongodb-secret
+        key: mongo_user
+    MONGO_PASSWORD:
+      secretKeyRef:
+        name: mongodb-secret
+        key: mongo_password
+    MONGO_ENV:
+      secretKeyRef:
+        name: mongodb-secret
+        key: mongo_env
+    MONGO_ADDRESS:
+      secretKeyRef:
+        name: mongodb-secret
+        key: mongo_address
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 60
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 1
+    targetCPUUtilizationPercentage: 90
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
