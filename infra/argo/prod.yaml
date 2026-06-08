@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tariff-manager-prod
+  namespace: argocd
+  labels:
+    repo: banula-tariff-manager
+spec:
+  project: banula
+  source:
+    repoURL: https://github.com/olisystems/banula-tariff-manager.git
+    targetRevision: v0.1.0
+    path: infra/helm
+    helm:
+      parameters:
+        - name: oli-app.image.tag
+          value: "v0.1.0"
+      valueFiles:
+        - values.yaml
+        - values.prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: banula-prod
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
