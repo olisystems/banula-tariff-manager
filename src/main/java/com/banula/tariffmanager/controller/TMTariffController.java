@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.banula.openlib.ocpi.annotation.LogRequest;
+import com.banula.openlib.ocpi.annotation.OcpiPutCompositeId;
 import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.OcpiResponse;
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
@@ -28,7 +29,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping("${party.api-prefix}/2.2.1/tariffs")
+@RequestMapping("/api/v1/internal/ocpi/2.2.1/tariffs")
 @Tag(name = "TMTariffs")
 @AllArgsConstructor
 @Slf4j
@@ -37,6 +38,7 @@ public class TMTariffController {
 
     @CrossOrigin
     @PutMapping("/{countryCode}/{partyId}/{tariffId}")
+    @OcpiPutCompositeId
     public ResponseEntity<OcpiResponse<String>> saveTariff(
             @RequestBody TariffDTO tariffDTO,
             @PathVariable(value = "countryCode") String countryCode,

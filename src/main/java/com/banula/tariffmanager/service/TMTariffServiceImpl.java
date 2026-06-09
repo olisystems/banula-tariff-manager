@@ -2,7 +2,9 @@ package com.banula.tariffmanager.service;
 
 import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
+import com.banula.openlib.ocpi.model.vo.EnergyMix;
 import com.banula.tariffmanager.client.HashingClient;
+import com.banula.tariffmanager.config.ApplicationConfiguration;
 import com.banula.tariffmanager.factory.TariffFactory;
 import com.banula.tariffmanager.model.OnChainTariff;
 import com.banula.tariffmanager.repository.TariffRepository;
@@ -21,10 +23,14 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TMTariffServiceImpl implements TMTariffService {
 
+    private static final int ENERGY_MIX_VALIDATION_ERROR_CODE = 2002;
+
     private final TariffRepository tariffRepository;
     private final TariffUtility tariffUtility;
 
     private final HashingClient hashingClient;
+
+    private final ApplicationConfiguration applicationConfiguration;
 
     @Override
     public TariffDTO getTariff(String countryCode, String partyId, String tariffId) {
@@ -42,6 +48,7 @@ public class TMTariffServiceImpl implements TMTariffService {
     @Override
     public OnChainTariff saveTariff(TariffDTO tariffDTO) {
         try {
+            assertEnergyMixRequirementsIfEnabled(tariffDTO);
             OnChainTariff tariff = TariffFactory.dtoToTariff(tariffDTO);
             String tariffTag = tariffDTO.getCountryCode() + "-" + tariffDTO.getPartyId() + "-" + tariffDTO.getId();
 
@@ -112,6 +119,31 @@ public class TMTariffServiceImpl implements TMTariffService {
             String errorMessage = "Error happened while fetching tariffs, error message: " + e.getLocalizedMessage();
             log.error(errorMessage);
             throw new OCPICustomException(errorMessage);
+        }
+    }
+
+    private void assertEnergyMixRequirementsIfEnabled(TariffDTO tariffDTO) {
+        if (!applicationConfiguration.isRequireEnergyMix()) {
+            return;
+        }
+        EnergyMix mix = tariffDTO.getEnergyMix();
+        if (mix == null) {
+            throw new OCPICustomException(
+                    "energy_mix is required when feature-flags.require-energy-mix is enabled",
+                    ENERGY_MIX_VALIDATION_ERROR_CODE);
+        }
+        if (!mix.isGreenEnergy()) {
+            throw new OCPICustomException(
+                    "energy_mix.is_green_energy must be true when feature-flags.require-energy-mix is enabled",
+                    ENERGY_MIX_VALIDATION_ERROR_CODE);
+        }
+        String expected = applicationConfiguration.getEnergyProductName();
+        String productName = mix.getEnergyProductName();
+        if (productName == null || !expected.equals(productName)) {
+            throw new OCPICustomException(
+                    "energy_mix.energy_product_name must be \"" + expected
+                            + "\" when feature-flags.require-energy-mix is enabled",
+                    ENERGY_MIX_VALIDATION_ERROR_CODE);
         }
     }
 

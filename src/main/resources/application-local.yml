@@ -11,10 +11,10 @@ spring:
       database: banula_local
       port: 27017
 
-party:
+api:
   charging-period-interval-in-seconds: 15
 
 platform:
-  url: http://localhost:8184/platform-platformban
-  party-id: LON
-  country-code: BR
+  url: http://localhost:8184
+  party-id: BAN
+  country-code: DE

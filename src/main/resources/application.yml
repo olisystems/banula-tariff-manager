@@ -12,14 +12,20 @@ spring:
       password: ${MONGO_PASSWORD:}
       database: ${MONGO_ENV:}
       host: ${MONGO_ADDRESS:}
+      auto-index-creation: true
 
-party:
+api:
   url: ${TARIFF_MANAGER_URL:}
-  api-prefix: ${TARIFF_MANAGER_API_PREFIX:/tariff-manager/ocpi/other}
-  api-non-ocpi-prefix: ${TARIFF_MANAGER_API_NON_OCPI_PREFIX:/tariff-manager/non-ocpi/other}
   role: OTHER
   log-payload: ${TARIFF_MANAGER_LOG_PAYLOAD:false}
   collection-prefix: "TariffManager_"
+  log-curl-command: ${TARIFF_MANAGER_LOG_CURL_COMMAND:false}
+
+# When require-energy-mix is true, PUT /tariffs only persists tariffs whose energy_mix has
+# is_green_energy true and energy_product_name equal to energy-product-name.
+feature-flags:
+  require-energy-mix: ${TARIFF_MANAGER_REQUIRE_ENERGY_MIX:false}
+  energy-product-name: ${TARIFF_MANAGER_ENERGY_PRODUCT_NAME:BANULA_CPO_TARIFF}
 
 platform:
   url: ${PLATFORM_URL:}
@@ -31,8 +37,10 @@ hashing-service:
 
 springdoc:
   swagger-ui:
-    path: /tariff-manager/non-ocpi/other/swagger-ui
-    enabled: true
+    path: /swagger-ui
+    enabled: ${SWAGGER_ENABLED:true}
+    config-url: ${SERVER_CONTEXT_PATH:}/api-docs/swagger-config
+    url: ${SERVER_CONTEXT_PATH:}/api-docs
   api-docs:
-    path: /tariff-manager/non-ocpi/other/api-docs
-    enabled: true
+    path: /api-docs
+    enabled: ${SWAGGER_ENABLED:true}
