@@ -46,8 +46,8 @@ public class TMTariffController {
             @PathVariable(value = "tariffId") String tariffId) {
         log.info("Saving tariffDTO: " + tariffDTO);
         log.info("CountryCode {}, partyId {}, tariffId {}", countryCode, partyId, tariffId);
-        OnChainTariff tariff = tmTariffService.saveTariff(tariffDTO);
-        return ResponseEntity.ok(new OcpiResponse<>(tariff.getHash()));
+        tmTariffService.saveTariff(tariffDTO);
+        return ResponseEntity.ok(new OcpiResponse<>(null));
     }
 
     @CrossOrigin
