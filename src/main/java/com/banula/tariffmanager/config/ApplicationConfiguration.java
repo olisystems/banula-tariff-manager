@@ -1,28 +1,28 @@
 package com.banula.tariffmanager.config;
 
-import lombok.Getter;
-import lombok.Setter;
-
-import java.util.HashMap;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-import com.banula.openlib.ocn.model.OcnVersionDetails;
 import com.banula.openlib.ocpi.model.enums.Role;
+import com.banula.openlib.ocpi.model.enums.VersionNumber;
 import com.banula.openlib.ocpi.platform.PlatformConfiguration;
+
+import lombok.Data;
 
 @Configuration
 @EnableConfigurationProperties
-@Getter
-@Setter
+@Data
 public class ApplicationConfiguration implements PlatformConfiguration {
+
     @Value("${api.url}")
     private String backendUrl;
 
     @Value("${api.role}")
-    private Role role;
+    private Role ocpiRole;
+
+    @Value("${api.ocpi-version}")
+    private String ocpiVersion;
 
     // Hashing service
     @Value("${hashing-service.url}")
@@ -40,27 +40,17 @@ public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${feature-flags.energy-product-name:BANULA_CPO_TARIFF}")
     private String energyProductName;
 
+    @Value("${platform.url}")
+    private String platformUrl;
+
+    @Override
+    public VersionNumber getOcpiVersion() {
+        return VersionNumber.fromValue(ocpiVersion);
+    }
+
     public boolean isToLogCurlCommands() {
         return logCurlCommand;
     }
 
-    @Value("${platform.url}")
-    private String platformUrl;
-
-    @Value("${platform.party-id}")
-    private String partyId;
-
-    @Value("${platform.country-code}")
-    private String countryCode;
-
-    private HashMap<String, OcnVersionDetails> ocnVersionDetails;
-
-    @Override
-    public void setOcnVersionDetails(String tenantId, OcnVersionDetails _ocnVersionDetails) {
-        if (this.ocnVersionDetails == null) {
-            this.ocnVersionDetails = new HashMap<String, OcnVersionDetails>();
-        }
-        this.ocnVersionDetails.put(tenantId, _ocnVersionDetails);
-    }
-
 }
+
