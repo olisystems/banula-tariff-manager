@@ -5,10 +5,12 @@ import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.banula.openlib.ocpi.annotation.LogRequest;
 import com.banula.openlib.ocpi.annotation.OcpiGetCompositeId;
 import com.banula.openlib.ocpi.annotation.OcpiPutCompositeId;
+import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.OcpiResponse;
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
 import com.banula.tariffmanager.service.TMTariffService;
@@ -56,6 +59,23 @@ public class TMTariffController {
         log.info("Retrieving tariff for party: " + countryCode + "-" + partyId + " and tariff: " + tariffId);
         TariffDTO tariff = tmTariffService.getTariff(countryCode, partyId, tariffId);
         return ResponseEntity.ok(new OcpiResponse<>(tariff));
+    }
+
+    @CrossOrigin
+    @DeleteMapping("/{countryCode}/{partyId}/{tariffId}")
+    public ResponseEntity<OcpiResponse<String>> deleteTariff(
+            @PathVariable(value = "countryCode") String countryCode,
+            @PathVariable(value = "partyId") String partyId,
+            @PathVariable(value = "tariffId") String tariffId,
+            @RequestHeader("ocpi-from-country-code") String fromCountryCode,
+            @RequestHeader("ocpi-from-party-id") String fromPartyId) {
+        log.info("Delete request for countryCode {}, partyId {}, tariffId {}", countryCode, partyId, tariffId);
+        if (!fromCountryCode.equalsIgnoreCase(countryCode) || !fromPartyId.equalsIgnoreCase(partyId)) {
+            throw new OCPICustomException(
+                    "Caller ocpi-from credentials do not match the tariff's countryCode/partyId", 2001);
+        }
+        tmTariffService.deleteTariff(countryCode, partyId, tariffId);
+        return ResponseEntity.ok(new OcpiResponse<>(null));
     }
 
     @GetMapping

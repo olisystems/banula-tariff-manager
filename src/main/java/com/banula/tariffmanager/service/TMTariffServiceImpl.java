@@ -123,6 +123,17 @@ public class TMTariffServiceImpl implements TMTariffService {
         }
     }
 
+    @Override
+    public void deleteTariff(String countryCode, String partyId, String tariffId) {
+        try {
+            tariffRepository.deleteByCompositeKey(countryCode, partyId, tariffId);
+        } catch (Exception e) {
+            String errorMessage = "Error happened while deleting tariff, error message: " + e.getLocalizedMessage();
+            log.error(errorMessage);
+            throw new OCPICustomException(errorMessage);
+        }
+    }
+
     private void assertEnergyMixRequirementsIfEnabled(TariffDTO tariffDTO) {
         if (!applicationConfiguration.isRequireEnergyMix()) {
             return;

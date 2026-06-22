@@ -25,4 +25,7 @@ public interface TariffRepository extends MongoRepository<OnChainTariff, String>
             LocalDateTime datetime);
 
     Optional<OnChainTariff> findByHash(String hash);
+
+    @Query(value = "{'countryCode': ?0, 'partyId': ?1, 'id': ?2}", delete = true)
+    void deleteByCompositeKey(String countryCode, String partyId, String tariffId);
 }
