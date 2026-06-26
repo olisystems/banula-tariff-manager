@@ -1,13 +1,13 @@
 package com.banula.tariffmanager.repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 
 import com.banula.tariffmanager.model.OnChainTariff;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 
 public interface TariffRepository extends MongoRepository<OnChainTariff, String> {
 
@@ -25,4 +25,7 @@ public interface TariffRepository extends MongoRepository<OnChainTariff, String>
             LocalDateTime datetime);
 
     Optional<OnChainTariff> findByHash(String hash);
+
+    @Query(value = "{'countryCode': ?0, 'partyId': ?1, 'id': ?2}", delete = true)
+    void deleteByCompositeKey(String countryCode, String partyId, String tariffId);
 }
