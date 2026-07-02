@@ -37,6 +37,7 @@ hashing-service:
   url: ${HASHING_SERVICE_URL:}
 
 springdoc:
+  writer-with-order-by-keys: true
   swagger-ui:
     path: /swagger-ui
     enabled: ${SWAGGER_ENABLED:true}
