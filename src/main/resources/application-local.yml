@@ -18,3 +18,9 @@ platform:
   url: http://localhost:8184
   party-id: BAN
   country-code: DE
+
+tariff-sync:
+  enabled: true
+  interval: 3600000
+  lookback-hours: 1
+  welcome-lookback-days: 3650

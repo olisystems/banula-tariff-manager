@@ -9,12 +9,13 @@ import org.springframework.stereotype.Component;
 public class MongoCollectionMapper {
     private final String tariffCollectionName;
     private final String ocnCredentialsCollectionName;
+    private final String hubClientInfoCollectionName;
 
     @Autowired
     public MongoCollectionMapper(ApplicationConfiguration config) {
         String prefix = config.getCollectionPrefix();
         this.tariffCollectionName = prefix + "OnChainTariff";
         this.ocnCredentialsCollectionName = prefix + "OcnCredentials";
-
+        this.hubClientInfoCollectionName = prefix + "ClientInfo";
     }
 }
