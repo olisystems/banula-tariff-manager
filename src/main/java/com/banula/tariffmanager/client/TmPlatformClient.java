@@ -5,6 +5,7 @@ import com.banula.openlib.ocpi.model.OcpiResponse;
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
 import com.banula.openlib.ocpi.util.Constants;
 import com.banula.tariffmanager.config.ApplicationConfiguration;
+import com.banula.tariffmanager.model.dto.HubClientInfoDTO;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -19,6 +20,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -81,6 +83,33 @@ public class TmPlatformClient {
             offset += PAGE_LIMIT;
         }
         return all;
+    }
+
+    /**
+     * GET hubclientinfo from the hub identity (DE/BAN) so tariff-manager can discover connected
+     * CPOs and run welcome sync.
+     */
+    public List<HubClientInfoDTO> getHubClientInfos() {
+        String hubCountry = applicationConfiguration.getCountryCode();
+        String hubParty = applicationConfiguration.getPartyId();
+        String url = applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
+                + "/hubclientinfo";
+
+        OcpiResponse<List<HubClientInfoDTO>> response = exchange(
+                url,
+                HttpMethod.GET,
+                hubCountry,
+                hubParty,
+                null,
+                new ParameterizedTypeReference<OcpiResponse<List<HubClientInfoDTO>>>() {
+                });
+
+        if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
+            String message = response != null ? response.getStatus_message() : "empty response";
+            throw new OCPICustomException(
+                    "Failed to pull hubclientinfo from hub " + hubCountry + "/" + hubParty + ": " + message);
+        }
+        return response.getData() != null ? response.getData() : Collections.emptyList();
     }
 
     /**

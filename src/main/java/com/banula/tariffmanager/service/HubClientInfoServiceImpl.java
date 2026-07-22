@@ -2,6 +2,7 @@ package com.banula.tariffmanager.service;
 
 import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.enums.ConnectionStatus;
+import com.banula.tariffmanager.client.TmPlatformClient;
 import com.banula.tariffmanager.config.MongoCollectionMapper;
 import com.banula.tariffmanager.event.PartyConnectedEvent;
 import com.banula.tariffmanager.mapper.ClientInfoMapper;
@@ -31,6 +32,7 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
     private final MongoTemplate mongoTemplate;
     private final MongoCollectionMapper mongoCollectionMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final TmPlatformClient tmPlatformClient;
 
     @Override
     public HubClientInfoDTO updateHubClientInfoByPartyIdAndCountryCode(String partyId, String countryCode,
@@ -78,5 +80,19 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
         log.info("Party {}/{} ({}) became CONNECTED; publishing welcome event", saved.getCountryCode(),
                 saved.getPartyId(), saved.getRole());
         eventPublisher.publishEvent(new PartyConnectedEvent(this, saved));
+    }
+
+    @Override
+    public void syncAllHubClientInfoParties() {
+        try {
+            List<HubClientInfoDTO> parties = tmPlatformClient.getHubClientInfos();
+            log.info("HubClientInfo sync pulled {} party record(s) from hub", parties.size());
+            for (HubClientInfoDTO party : parties) {
+                updateHubClientInfoByPartyIdAndCountryCode(party.getPartyId(), party.getCountryCode(), party);
+            }
+        } catch (Exception ex) {
+            log.warn("Initial HubClientInfo sync failed, tariff-manager will learn parties dynamically: {}",
+                    ex.getLocalizedMessage());
+        }
     }
 }

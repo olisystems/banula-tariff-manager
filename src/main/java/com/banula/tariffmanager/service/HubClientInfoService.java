@@ -11,4 +11,6 @@ public interface HubClientInfoService {
             HubClientInfoDTO clientInfoDTO);
 
     List<HubClientInfoDTO> getHubClientInfosByStatus(List<ConnectionStatus> statuses);
+
+    void syncAllHubClientInfoParties();
 }
