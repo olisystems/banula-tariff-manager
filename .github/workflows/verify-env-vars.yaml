@@ -1,14 +1,17 @@
 name: Verify Env Vars Sync
 
 on:
+  pull_request:
+    branches:
+      - main
+      - develop
   push:
-  release:
-    types: [published]
-  workflow_dispatch:
+    branches:
+      - main
+      - develop
 
 jobs:
   verify-dev-required-vars:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +20,6 @@ jobs:
           values-files: infra/helm/values.yaml,infra/helm/values.dev.yaml
 
   verify-dev-unused-vars:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +32,6 @@ jobs:
   # (those files carry no `env:` overrides for this service), so the containment checks
   # compare the ConfigMap files there instead of the local values files.
   verify-int-in-dev:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +47,6 @@ jobs:
           env-key-path: .data
 
   verify-prod-in-dev:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'release' && !github.event.release.prerelease)
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
