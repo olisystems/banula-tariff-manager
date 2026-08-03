@@ -12,7 +12,6 @@ on:
 
 jobs:
   verify-dev-required-vars:
-    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: olisystems/actions/helm/verify-required-values@main
