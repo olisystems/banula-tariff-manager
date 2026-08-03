@@ -19,7 +19,7 @@ jobs:
           values-files: infra/helm/values.yaml,infra/helm/values.dev.yaml
 
   verify-dev-unused-vars:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: olisystems/actions/helm/verify-unused-values@main
