@@ -1,7 +1,7 @@
 oli-app:
   fullnameOverride: "tariff-manager-dev"
   image:
-    tag: "develop-f292934"
+    tag: "develop-8762bcd"
   ingress:
     hosts:
       - host: banula-dev.oli-system.com
