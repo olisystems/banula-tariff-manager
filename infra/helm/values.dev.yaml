@@ -2,6 +2,3 @@ oli-app:
   fullnameOverride: "tariff-manager-dev"
   image:
     tag: "develop-2296197"
-  # nginx ingress disabled — service is cluster-internal only now.
-  ingress:
-    enabled: false

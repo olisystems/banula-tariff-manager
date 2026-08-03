@@ -24,30 +24,6 @@ oli-app:
     port: 80
     containerPort: 8080
 
-  ingress:
-    enabled: false
-    className: "nginx"
-    features:
-      certManager:
-        enabled: false
-      sslRedirect:
-        enabled: true
-      rateLimiting:
-        enabled: true
-        rpm: 300
-        connections: 10
-      proxySettings:
-        enabled: true
-        bodySize: "8m"
-        bufferSize: "32k"
-      router:
-        enabled: true
-        prefix: "/tariff-manager"
-        stripPrefix: true
-        routes:
-          exposeCommon: false
-          exposeAll: false
-
   env:
     SERVER_CONTEXT_PATH: "/tariff-manager"
     TARIFF_MANAGER_LOG_PAYLOAD: "true"
