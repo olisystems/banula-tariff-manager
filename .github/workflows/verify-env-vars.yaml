@@ -12,7 +12,7 @@ on:
 
 jobs:
   verify-dev-required-vars:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: olisystems/actions/helm/verify-required-values@main
@@ -20,7 +20,7 @@ jobs:
           values-files: infra/helm/values.yaml,infra/helm/values.dev.yaml
 
   verify-dev-unused-vars:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: olisystems/actions/helm/verify-unused-values@main
@@ -32,7 +32,7 @@ jobs:
   # (those files carry no `env:` overrides for this service), so the containment checks
   # compare the ConfigMap files there instead of the local values files.
   verify-int-in-dev:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Checkout common-infra-resources
@@ -47,7 +47,7 @@ jobs:
           env-key-path: .data
 
   verify-prod-in-dev:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Checkout common-infra-resources
