@@ -13,27 +13,109 @@ on:
 
 jobs:
   verify-dev-required-vars:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: olisystems/actions/helm/verify-required-values@main
+
+      - name: Cache yq
+        id: cache-yq
+        uses: actions/cache@v4
         with:
-          values-files: infra/helm/values.yaml,infra/helm/values.dev.yaml
+          path: /usr/local/bin/yq
+          key: yq-linux-amd64
+
+      - name: Install yq
+        if: steps.cache-yq.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Compare required vars
+        shell: bash
+        env:
+          SOURCE_FILE: src/main/resources/application.yml
+          VALUES_FILES: infra/helm/values.yaml,infra/helm/values.dev.yaml
+          ENV_KEY_PATH: .oli-app.env
+        run: |
+          # Spring Boot config source is either application.yml or application.properties;
+          # yq needs -p=props to parse the latter (a flat KEY=value format, not YAML).
+          YQ_FLAGS=()
+          [[ "$SOURCE_FILE" == *.properties ]] && YQ_FLAGS=(-p=props)
+          REQUIRED_VARS=$(yq eval "${YQ_FLAGS[@]}" '.. | select(tag == "!!str") | match("\$\{(?P<var>[A-Za-z0-9_]+):?\}"; "g").captures[0].string' "$SOURCE_FILE" | sort -u)
+
+          DEFINED_VARS=""
+          IFS=',' read -ra FILES <<< "$VALUES_FILES"
+          for f in "${FILES[@]}"; do
+            DEFINED_VARS+=$'\n'"$(yq eval "($ENV_KEY_PATH // {}) | keys | .[]" "$f")"
+          done
+          DEFINED_VARS=$(echo "$DEFINED_VARS" | sed '/^$/d' | sort -u)
+
+          MISSING=$(comm -23 <(echo "$REQUIRED_VARS") <(echo "$DEFINED_VARS"))
+
+          if [[ -n "$MISSING" ]]; then
+            echo "::error::Variables required by $SOURCE_FILE without a default value, but not defined in $VALUES_FILES:"
+            echo "$MISSING"
+            exit 1
+          fi
+
+          echo "All required variables from $SOURCE_FILE are covered."
 
   verify-dev-unused-vars:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: olisystems/actions/helm/verify-unused-values@main
+
+      - name: Cache yq
+        id: cache-yq
+        uses: actions/cache@v4
         with:
-          values-files: infra/helm/values.yaml,infra/helm/values.dev.yaml
+          path: /usr/local/bin/yq
+          key: yq-linux-amd64
+
+      - name: Install yq
+        if: steps.cache-yq.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Compare unused vars
+        shell: bash
+        env:
+          SOURCE_FILE: src/main/resources/application.yml
+          VALUES_FILES: infra/helm/values.yaml,infra/helm/values.dev.yaml
+          ENV_KEY_PATH: .oli-app.env
+        run: |
+          # Spring Boot config source is either application.yml or application.properties;
+          # yq needs -p=props to parse the latter (a flat KEY=value format, not YAML).
+          YQ_FLAGS=()
+          [[ "$SOURCE_FILE" == *.properties ]] && YQ_FLAGS=(-p=props)
+          USED_VARS=$(yq eval "${YQ_FLAGS[@]}" '.. | select(tag == "!!str") | match("\$\{(?P<var>[A-Za-z0-9_]+)(:[^}]*)?\}"; "g").captures[0].string' "$SOURCE_FILE" | sort -u)
+
+          DEFINED_VARS=""
+          IFS=',' read -ra FILES <<< "$VALUES_FILES"
+          for f in "${FILES[@]}"; do
+            DEFINED_VARS+=$'\n'"$(yq eval "($ENV_KEY_PATH // {}) | keys | .[]" "$f")"
+          done
+          DEFINED_VARS=$(echo "$DEFINED_VARS" | sed '/^$/d' | sort -u)
+
+          UNUSED=$(comm -23 <(echo "$DEFINED_VARS") <(echo "$USED_VARS"))
+
+          if [[ -n "$UNUSED" ]]; then
+            echo "::error::Variables defined in $VALUES_FILES but not referenced in $SOURCE_FILE:"
+            echo "$UNUSED"
+            exit 1
+          fi
+
+          echo "All variables defined in $VALUES_FILES are referenced in $SOURCE_FILE."
 
   # tariff-manager's per-environment config lives in the external common-infra-resources
   # repo (ConfigMap manifests), not in infra/helm/values.dev.yaml/values.int.yaml/values.prod.yaml
   # (those files carry no `env:` overrides for this service), so the containment checks
   # compare the ConfigMap files there instead of the local values files.
   verify-int-in-dev:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Checkout common-infra-resources
@@ -41,14 +123,47 @@ jobs:
         with:
           repository: olisystems/common-infra-resources
           path: common-infra-resources
-      - uses: olisystems/actions/helm/verify-values-containment@main
+
+      - name: Cache yq
+        id: cache-yq
+        uses: actions/cache@v4
         with:
-          source-file: common-infra-resources/transit/dev/configmaps/tariff-manager-config.yaml
-          target-file: common-infra-resources/transit/int/configmaps/tariff-manager-config.yaml
-          env-key-path: .data
+          path: /usr/local/bin/yq
+          key: yq-linux-amd64
+
+      - name: Install yq
+        if: steps.cache-yq.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Compare env keys
+        shell: bash
+        env:
+          SOURCE_FILE: common-infra-resources/transit/dev/configmaps/tariff-manager-config.yaml
+          TARGET_FILE: common-infra-resources/transit/int/configmaps/tariff-manager-config.yaml
+          ENV_KEY_PATH: .data
+        run: |
+          get_env_leaf_paths() {
+            yq eval "($ENV_KEY_PATH // {}) | .. | select(tag != \"!!map\" and tag != \"!!seq\") | path | join(\".\")" "$1" | sort -u
+          }
+
+          SOURCE_PATHS=$(get_env_leaf_paths "$SOURCE_FILE")
+          TARGET_PATHS=$(get_env_leaf_paths "$TARGET_FILE")
+
+          MISSING=$(comm -23 <(echo "$SOURCE_PATHS") <(echo "$TARGET_PATHS"))
+
+          if [[ -n "$MISSING" ]]; then
+            echo "::error::Env vars present in $ENV_KEY_PATH of $SOURCE_FILE but missing from $ENV_KEY_PATH of $TARGET_FILE:"
+            echo "$MISSING"
+            exit 1
+          fi
+
+          echo "All env vars in $ENV_KEY_PATH of $SOURCE_FILE are present in $TARGET_FILE."
 
   verify-prod-in-dev:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Checkout common-infra-resources
@@ -56,8 +171,41 @@ jobs:
         with:
           repository: olisystems/common-infra-resources
           path: common-infra-resources
-      - uses: olisystems/actions/helm/verify-values-containment@main
+
+      - name: Cache yq
+        id: cache-yq
+        uses: actions/cache@v4
         with:
-          source-file: common-infra-resources/transit/dev/configmaps/tariff-manager-config.yaml
-          target-file: common-infra-resources/transit/prod/configmaps/tariff-manager-config.yaml
-          env-key-path: .data
+          path: /usr/local/bin/yq
+          key: yq-linux-amd64
+
+      - name: Install yq
+        if: steps.cache-yq.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Compare env keys
+        shell: bash
+        env:
+          SOURCE_FILE: common-infra-resources/transit/dev/configmaps/tariff-manager-config.yaml
+          TARGET_FILE: common-infra-resources/transit/prod/configmaps/tariff-manager-config.yaml
+          ENV_KEY_PATH: .data
+        run: |
+          get_env_leaf_paths() {
+            yq eval "($ENV_KEY_PATH // {}) | .. | select(tag != \"!!map\" and tag != \"!!seq\") | path | join(\".\")" "$1" | sort -u
+          }
+
+          SOURCE_PATHS=$(get_env_leaf_paths "$SOURCE_FILE")
+          TARGET_PATHS=$(get_env_leaf_paths "$TARGET_FILE")
+
+          MISSING=$(comm -23 <(echo "$SOURCE_PATHS") <(echo "$TARGET_PATHS"))
+
+          if [[ -n "$MISSING" ]]; then
+            echo "::error::Env vars present in $ENV_KEY_PATH of $SOURCE_FILE but missing from $ENV_KEY_PATH of $TARGET_FILE:"
+            echo "$MISSING"
+            exit 1
+          fi
+
+          echo "All env vars in $ENV_KEY_PATH of $SOURCE_FILE are present in $TARGET_FILE."
