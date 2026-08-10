@@ -17,6 +17,7 @@ spring:
 api:
   url: ${TARIFF_MANAGER_URL:}
   role: OTHER
+  ocpi-version: ${TARIFF_MANAGER_OCPI_VERSION:2.2.1}
   log-payload: ${TARIFF_MANAGER_LOG_PAYLOAD:false}
   collection-prefix: "TariffManager_"
   log-curl-command: ${TARIFF_MANAGER_LOG_CURL_COMMAND:false}
@@ -36,6 +37,7 @@ hashing-service:
   url: ${HASHING_SERVICE_URL:}
 
 springdoc:
+  writer-with-order-by-keys: true
   swagger-ui:
     path: /swagger-ui
     enabled: ${SWAGGER_ENABLED:true}
