@@ -1,7 +1,7 @@
 oli-app:
   fullnameOverride: "tariff-manager-int"
   image:
-    tag: "main-37bdf06"
+    tag: "main-8a5d8ff"
   ingress:
     hosts:
       - host: banula-int.oli-system.com
