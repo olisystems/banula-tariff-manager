@@ -1,16 +1,4 @@
 oli-app:
   fullnameOverride: "tariff-manager-dev"
   image:
-    tag: "develop-2da2242"
-  ingress:
-    hosts:
-      - host: banula-dev.oli-system.com
-    tls:
-      - secretName: banula-dev-tls
-        hosts:
-          - banula-dev.oli-system.com
-    features:
-      router:
-        routes:
-          exposeCommon: false
-          exposeAll: true
+    tag: "develop-314fc47"
