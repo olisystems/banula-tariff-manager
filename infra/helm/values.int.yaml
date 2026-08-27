@@ -1,4 +1,2 @@
 oli-app:
   fullnameOverride: "tariff-manager-int"
-  image:
-    tag: "main-e56c7b8"
