@@ -1,4 +1,2 @@
 oli-app:
   fullnameOverride: "tariff-manager-dev"
-  image:
-    tag: "develop-5089776"
