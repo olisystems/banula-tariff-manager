@@ -33,6 +33,13 @@ platform:
   party-id: ${PLATFORM_PARTY_ID:}
   country-code: ${PLATFORM_COUNTRY_CODE:}
 
+# Pull tariffs from connected CPOs and redistribute to EMSPs
+tariff-sync:
+  enabled: ${TARIFF_SYNC_ENABLED:true}
+  interval: ${TARIFF_SYNC_INTERVAL:3600000} # 1 hour
+  lookback-hours: ${TARIFF_SYNC_LOOKBACK_HOURS:1}
+  welcome-lookback-days: ${TARIFF_SYNC_WELCOME_LOOKBACK_DAYS:3650}
+
 hashing-service:
   url: ${HASHING_SERVICE_URL:}
 
