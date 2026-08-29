@@ -1,7 +1,9 @@
 package com.banula.tariffmanager.controller;
 
 import com.banula.openlib.ocpi.annotation.LogRequest;
+import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.OcpiResponse;
+import com.banula.openlib.ocpi.util.Constants;
 import com.banula.tariffmanager.model.dto.HubClientInfoDTO;
 import com.banula.tariffmanager.service.HubClientInfoService;
 import lombok.AllArgsConstructor;
@@ -27,6 +29,10 @@ public class HubClientInfoController {
             @PathVariable String partyId,
             @PathVariable String countryCode,
             @RequestBody HubClientInfoDTO clientInfoDTO) {
+        if (clientInfoDTO == null) {
+            throw new OCPICustomException("Request body is required",
+                    Constants.STATUS_CODE_INVALID_OR_MISSING_PARAMETERS);
+        }
         HubClientInfoDTO updated = hubClientInfoService.updateHubClientInfoByPartyIdAndCountryCode(partyId, countryCode,
                 clientInfoDTO);
         return ResponseEntity.ok(new OcpiResponse<>(updated));

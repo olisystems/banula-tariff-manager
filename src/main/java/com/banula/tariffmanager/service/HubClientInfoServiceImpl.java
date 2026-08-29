@@ -2,20 +2,22 @@ package com.banula.tariffmanager.service;
 
 import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.enums.ConnectionStatus;
+import com.banula.openlib.ocpi.util.Constants;
 import com.banula.tariffmanager.client.TmPlatformClient;
 import com.banula.tariffmanager.config.MongoCollectionMapper;
 import com.banula.tariffmanager.event.PartyConnectedEvent;
 import com.banula.tariffmanager.mapper.ClientInfoMapper;
 import com.banula.tariffmanager.model.MongoClientInfo;
 import com.banula.tariffmanager.model.dto.HubClientInfoDTO;
-import com.banula.tariffmanager.repository.HubClientInfoRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,7 +30,6 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class HubClientInfoServiceImpl implements HubClientInfoService {
 
-    private final HubClientInfoRepository hubClientInfoRepository;
     private final MongoTemplate mongoTemplate;
     private final MongoCollectionMapper mongoCollectionMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -37,18 +38,37 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
     @Override
     public HubClientInfoDTO updateHubClientInfoByPartyIdAndCountryCode(String partyId, String countryCode,
             HubClientInfoDTO clientInfoDTO) {
-        MongoClientInfo mongoClientInfo = hubClientInfoRepository
-                .findByPartyIdAndCountryCodeAndRole(partyId, countryCode, clientInfoDTO.getRole()).orElse(null);
-        ConnectionStatus previousStatus = mongoClientInfo != null ? mongoClientInfo.getStatus() : null;
-        if (mongoClientInfo == null) {
-            mongoClientInfo = new MongoClientInfo();
-            mongoClientInfo.setPartyId(partyId);
-            mongoClientInfo.setCountryCode(countryCode);
-            mongoClientInfo.setRole(clientInfoDTO.getRole());
+        if (clientInfoDTO == null || clientInfoDTO.getRole() == null) {
+            throw new OCPICustomException("Client info role is required",
+                    Constants.STATUS_CODE_INVALID_OR_MISSING_PARAMETERS);
         }
-        mongoClientInfo.setStatus(clientInfoDTO.getStatus());
-        mongoClientInfo.setLastUpdated(LocalDateTime.now(ZoneOffset.UTC));
-        HubClientInfoDTO saved = ClientInfoMapper.toHubClientInfoDTO(hubClientInfoRepository.save(mongoClientInfo));
+
+        LocalDateTime lastUpdated = LocalDateTime.now(ZoneOffset.UTC);
+        Query query = Query.query(Criteria.where("partyId").is(partyId)
+                .and("countryCode").is(countryCode)
+                .and("role").is(clientInfoDTO.getRole()));
+        Update update = new Update()
+                .set("status", clientInfoDTO.getStatus())
+                .set("lastUpdated", lastUpdated)
+                .setOnInsert("partyId", partyId)
+                .setOnInsert("countryCode", countryCode)
+                .setOnInsert("role", clientInfoDTO.getRole());
+        FindAndModifyOptions options = FindAndModifyOptions.options().upsert(true).returnNew(false);
+
+        MongoClientInfo previous = mongoTemplate.findAndModify(query, update, options, MongoClientInfo.class,
+                mongoCollectionMapper.getHubClientInfoCollectionName());
+        ConnectionStatus previousStatus = previous != null ? previous.getStatus() : null;
+
+        MongoClientInfo current = previous != null ? previous : new MongoClientInfo();
+        if (previous == null) {
+            current.setPartyId(partyId);
+            current.setCountryCode(countryCode);
+            current.setRole(clientInfoDTO.getRole());
+        }
+        current.setStatus(clientInfoDTO.getStatus());
+        current.setLastUpdated(lastUpdated);
+
+        HubClientInfoDTO saved = ClientInfoMapper.toHubClientInfoDTO(current);
         publishConnectedIfTransition(previousStatus, saved);
         return saved;
     }

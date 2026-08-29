@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -57,7 +58,7 @@ public class TmPlatformClient {
                 builder.queryParam("date_to", dateTo.toString());
             }
 
-            OcpiResponse<List<TariffDTO>> response = exchange(
+            ResponseEntity<OcpiResponse<List<TariffDTO>>> responseEntity = exchangeEntity(
                     builder.encode().toUriString(),
                     HttpMethod.GET,
                     toCountryCode,
@@ -66,6 +67,7 @@ public class TmPlatformClient {
                     new ParameterizedTypeReference<OcpiResponse<List<TariffDTO>>>() {
                     });
 
+            OcpiResponse<List<TariffDTO>> response = responseEntity.getBody();
             if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
                 String message = response != null ? response.getStatus_message() : "empty response";
                 throw new OCPICustomException(
@@ -77,7 +79,7 @@ public class TmPlatformClient {
                 break;
             }
             all.addAll(page);
-            if (page.size() < PAGE_LIMIT) {
+            if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
             offset += PAGE_LIMIT;
@@ -150,6 +152,16 @@ public class TmPlatformClient {
             String toPartyId,
             B body,
             ParameterizedTypeReference<OcpiResponse<T>> responseType) {
+        return exchangeEntity(url, method, toCountryCode, toPartyId, body, responseType).getBody();
+    }
+
+    private <T, B> ResponseEntity<OcpiResponse<T>> exchangeEntity(
+            String url,
+            HttpMethod method,
+            String toCountryCode,
+            String toPartyId,
+            B body,
+            ParameterizedTypeReference<OcpiResponse<T>> responseType) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -158,17 +170,44 @@ public class TmPlatformClient {
             headers.set("X-Correlation-ID", UUID.randomUUID().toString());
             headers.set("OCPI-to-country-code", toCountryCode);
             headers.set("OCPI-to-party-id", toPartyId);
+            headers.set("OCPI-from-country-code", applicationConfiguration.getCountryCode());
+            headers.set("OCPI-from-party-id", applicationConfiguration.getPartyId());
 
-            ResponseEntity<OcpiResponse<T>> response = restTemplate.exchange(
+            return restTemplate.exchange(
                     url,
                     method,
                     new HttpEntity<>(body, headers),
                     responseType);
-            return response.getBody();
         } catch (Exception e) {
             log.error("Platform request {} {} failed for {}/{}: {}", method, url, toCountryCode, toPartyId,
                     e.getMessage());
             throw new OCPICustomException("Platform request failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Prefer OCPI 2.2.1 pagination headers ({@code Link} / {@code X-Total-Count}). Fall back to a
+     * full page only when those headers are absent (e.g. an internal proxy stripped them).
+     */
+    private boolean hasNextPage(HttpHeaders headers, int offset, int pageSize) {
+        if (headers == null) {
+            return pageSize >= PAGE_LIMIT;
+        }
+        String link = headers.getFirst(HttpHeaders.LINK);
+        if (link != null && link.toLowerCase(Locale.ROOT).contains("rel=\"next\"")) {
+            return true;
+        }
+        if (link != null) {
+            return false;
+        }
+        String totalCount = headers.getFirst("X-Total-Count");
+        if (totalCount != null && !totalCount.isBlank()) {
+            try {
+                return offset + pageSize < Integer.parseInt(totalCount.trim());
+            } catch (NumberFormatException ignored) {
+                log.debug("Ignoring unparsable X-Total-Count header: {}", totalCount);
+            }
+        }
+        return pageSize >= PAGE_LIMIT;
     }
 }

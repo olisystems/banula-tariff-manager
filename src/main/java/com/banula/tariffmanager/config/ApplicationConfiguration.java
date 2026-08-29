@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Locale;
+
 import com.banula.openlib.ocpi.model.enums.Role;
 import com.banula.openlib.ocpi.model.enums.VersionNumber;
 import com.banula.openlib.ocpi.platform.PlatformConfiguration;
@@ -76,7 +78,7 @@ public class ApplicationConfiguration implements PlatformConfiguration {
         if (countryCode == null || countryCode.isBlank() || partyId == null || partyId.isBlank()) {
             return null;
         }
-        return countryCode.trim().toUpperCase() + "_" + partyId.trim().toUpperCase();
+        return countryCode.trim().toUpperCase(Locale.ROOT) + "_" + partyId.trim().toUpperCase(Locale.ROOT);
     }
 
 }

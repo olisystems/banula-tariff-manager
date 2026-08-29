@@ -10,6 +10,7 @@ public class MongoCollectionMapper {
     private final String tariffCollectionName;
     private final String ocnCredentialsCollectionName;
     private final String hubClientInfoCollectionName;
+    private final String tariffPublicationOutboxCollectionName;
 
     @Autowired
     public MongoCollectionMapper(ApplicationConfiguration config) {
@@ -17,5 +18,6 @@ public class MongoCollectionMapper {
         this.tariffCollectionName = prefix + "OnChainTariff";
         this.ocnCredentialsCollectionName = prefix + "OcnCredentials";
         this.hubClientInfoCollectionName = prefix + "ClientInfo";
+        this.tariffPublicationOutboxCollectionName = prefix + "TariffPublicationOutbox";
     }
 }

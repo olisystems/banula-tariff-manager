@@ -4,11 +4,13 @@ import com.banula.openlib.ocpi.model.ClientInfo;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @SuperBuilder
 @NoArgsConstructor(force = true)
 @Document("#{@MongoCollectionMapper.getHubClientInfoCollectionName()}")
+@CompoundIndex(name = "unique_client_info", def = "{'countryCode': 1, 'partyId': 1, 'role': 1}", unique = true)
 public class MongoClientInfo extends ClientInfo {
 
     @Id
