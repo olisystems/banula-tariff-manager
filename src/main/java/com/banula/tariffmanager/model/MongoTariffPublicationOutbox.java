@@ -20,6 +20,8 @@ public class MongoTariffPublicationOutbox {
     private String partyId;
     private String tariffId;
     private TariffPublicationStatus status;
+    /** Token of the publication attempt that last moved this record to PENDING; see TariffSyncServiceImpl. */
+    private String attemptId;
     private LocalDateTime lastAttemptAt;
     private String lastError;
 }

@@ -38,8 +38,10 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
     @Override
     public HubClientInfoDTO updateHubClientInfoByPartyIdAndCountryCode(String partyId, String countryCode,
             HubClientInfoDTO clientInfoDTO) {
-        if (clientInfoDTO == null || clientInfoDTO.getRole() == null) {
-            throw new OCPICustomException("Client info role is required",
+        // status is a required field of the OCPI ClientInfo object: without this guard a body
+        // carrying only a role would overwrite a stored CONNECTED party with a null status.
+        if (clientInfoDTO == null || clientInfoDTO.getRole() == null || clientInfoDTO.getStatus() == null) {
+            throw new OCPICustomException("Client info role and status are required",
                     Constants.STATUS_CODE_INVALID_OR_MISSING_PARAMETERS);
         }
 
@@ -108,7 +110,12 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
             List<HubClientInfoDTO> parties = tmPlatformClient.getHubClientInfos();
             log.info("HubClientInfo sync pulled {} party record(s) from hub", parties.size());
             for (HubClientInfoDTO party : parties) {
-                updateHubClientInfoByPartyIdAndCountryCode(party.getPartyId(), party.getCountryCode(), party);
+                try {
+                    updateHubClientInfoByPartyIdAndCountryCode(party.getPartyId(), party.getCountryCode(), party);
+                } catch (Exception e) {
+                    log.warn("Skipping unusable hub client info record {}/{}: {}", party.getCountryCode(),
+                            party.getPartyId(), e.getMessage());
+                }
             }
         } catch (Exception ex) {
             log.warn("Initial HubClientInfo sync failed, tariff-manager will learn parties dynamically: {}",
