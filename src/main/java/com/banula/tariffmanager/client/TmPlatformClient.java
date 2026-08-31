@@ -20,7 +20,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -37,6 +36,11 @@ public class TmPlatformClient {
     private static final String OUTFLOW_BASE = "/api/v1/internal/outflow/ocpi";
     private static final String VERSION = "2.2.1";
     private static final int PAGE_LIMIT = 100;
+    /**
+     * Safety net for a server that ignores {@code offset} and keeps answering with a full page:
+     * without it the paging loops below would never terminate.
+     */
+    private static final int MAX_RECORDS = 10_000;
 
     private final RestTemplate restTemplate;
     private final ApplicationConfiguration applicationConfiguration;
@@ -78,11 +82,21 @@ public class TmPlatformClient {
             if (page == null || page.isEmpty()) {
                 break;
             }
-            all.addAll(page);
+            int remaining = MAX_RECORDS - all.size();
+            if (page.size() > remaining) {
+                all.addAll(page.subList(0, remaining));
+            } else {
+                all.addAll(page);
+            }
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
-            offset += PAGE_LIMIT;
+            offset += page.size();
+            if (all.size() >= MAX_RECORDS) {
+                log.warn("Stopping tariff pull from {}/{} at {} record(s): the server still advertises more",
+                        toCountryCode, toPartyId, all.size());
+                break;
+            }
         }
         return all;
     }
@@ -94,24 +108,54 @@ public class TmPlatformClient {
     public List<HubClientInfoDTO> getHubClientInfos() {
         String hubCountry = applicationConfiguration.getCountryCode();
         String hubParty = applicationConfiguration.getPartyId();
-        String url = applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
-                + "/hubclientinfo";
+        List<HubClientInfoDTO> all = new ArrayList<>();
+        int offset = 0;
+        while (true) {
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
+                            + "/hubclientinfo")
+                    .queryParam("offset", offset)
+                    .queryParam("limit", PAGE_LIMIT)
+                    .encode()
+                    .toUriString();
 
-        OcpiResponse<List<HubClientInfoDTO>> response = exchange(
-                url,
-                HttpMethod.GET,
-                hubCountry,
-                hubParty,
-                null,
-                new ParameterizedTypeReference<OcpiResponse<List<HubClientInfoDTO>>>() {
-                });
+            ResponseEntity<OcpiResponse<List<HubClientInfoDTO>>> responseEntity = exchangeEntity(
+                    url,
+                    HttpMethod.GET,
+                    hubCountry,
+                    hubParty,
+                    null,
+                    new ParameterizedTypeReference<OcpiResponse<List<HubClientInfoDTO>>>() {
+                    });
 
-        if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
-            String message = response != null ? response.getStatus_message() : "empty response";
-            throw new OCPICustomException(
-                    "Failed to pull hubclientinfo from hub " + hubCountry + "/" + hubParty + ": " + message);
+            OcpiResponse<List<HubClientInfoDTO>> response = responseEntity.getBody();
+            if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
+                String message = response != null ? response.getStatus_message() : "empty response";
+                throw new OCPICustomException(
+                        "Failed to pull hubclientinfo from hub " + hubCountry + "/" + hubParty + ": " + message);
+            }
+
+            List<HubClientInfoDTO> page = response.getData();
+            if (page == null || page.isEmpty()) {
+                break;
+            }
+            int remaining = MAX_RECORDS - all.size();
+            if (page.size() > remaining) {
+                all.addAll(page.subList(0, remaining));
+            } else {
+                all.addAll(page);
+            }
+            if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
+                break;
+            }
+            offset += page.size();
+            if (all.size() >= MAX_RECORDS) {
+                log.warn("Stopping hubclientinfo pull from hub {}/{} at {} record(s): the server still advertises more",
+                        hubCountry, hubParty, all.size());
+                break;
+            }
         }
-        return response.getData() != null ? response.getData() : Collections.emptyList();
+        return all;
     }
 
     /**
@@ -187,7 +231,9 @@ public class TmPlatformClient {
 
     /**
      * Prefer OCPI 2.2.1 pagination headers ({@code Link} / {@code X-Total-Count}). Fall back to a
-     * full page only when those headers are absent (e.g. an internal proxy stripped them).
+     * full page only when those headers are absent — which is the case today, because the platform
+     * outflow handler answers from a freshly built header set and does not relay the node's
+     * pagination headers, so there is no next-page link to follow.
      */
     private boolean hasNextPage(HttpHeaders headers, int offset, int pageSize) {
         if (headers == null) {

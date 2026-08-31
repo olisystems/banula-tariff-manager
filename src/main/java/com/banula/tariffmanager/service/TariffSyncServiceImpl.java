@@ -23,6 +23,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -99,14 +100,17 @@ public class TariffSyncServiceImpl implements TariffSyncService {
                         e.getMessage());
                 continue;
             }
-            markPublicationPending(tariff, null);
+            String attemptId = markPublicationPending(tariff, null);
             try {
                 // OCPI-to = hub (DE/BAN) → node broadcasts via ModuleNotificationService
                 tmPlatformClient.putTariffToHub(tariff);
-                markPublicationDelivered(tariff);
+                markPublicationDelivered(tariff, attemptId);
             } catch (Exception e) {
                 log.warn("Failed to put tariff {} to hub from {}/{}; will retry: {}", tariff.getId(), countryCode,
                         partyId, e.getMessage());
+                // A fresh attempt token is written on purpose: it fences any older PUT for the same
+                // tariff that is still in flight, so that one can no longer report DELIVERED over
+                // this failure.
                 markPublicationPending(tariff, e.getMessage());
             }
         }
@@ -132,23 +136,46 @@ public class TariffSyncServiceImpl implements TariffSyncService {
                     continue;
                 }
                 tmPlatformClient.putTariffToHub(tariff);
-                markPublicationDelivered(tariff);
+                markPublicationDelivered(tariff, record.getAttemptId());
             } catch (Exception e) {
                 log.warn("Retry PUT failed for tariff {}/{}/{}: {}", record.getCountryCode(), record.getPartyId(),
                         record.getTariffId(), e.getMessage());
-                record.setLastAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
-                record.setLastError(e.getMessage());
-                tariffPublicationOutboxRepository.save(record);
+                markRetryFailed(record, e.getMessage());
             }
         }
     }
 
-    private void markPublicationPending(TariffDTO tariff, String error) {
+    /**
+     * Records a failed retry without rewriting the whole document: a concurrent publication may
+     * already have written a newer status/attemptId, and a full save would roll that back. The
+     * attempt token in the query keeps the write scoped to the attempt that actually failed.
+     */
+    private void markRetryFailed(MongoTariffPublicationOutbox record, String error) {
+        Query query = Query.query(Criteria.where("countryCode").is(record.getCountryCode())
+                .and("partyId").is(record.getPartyId())
+                .and("tariffId").is(record.getTariffId())
+                .and("attemptId").is(record.getAttemptId()));
+        Update update = new Update()
+                .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
+                .set("lastError", error);
+        mongoTemplate.updateFirst(query, update, MongoTariffPublicationOutbox.class,
+                mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
+    }
+
+    /**
+     * Marks the tariff PENDING and returns the token identifying <em>this</em> attempt. Publication
+     * is not serialized per tariff (the welcome ceremony runs async while the hourly sync runs on
+     * the scheduler thread), so the token is what lets
+     * {@link #markPublicationDelivered(TariffDTO, String)} tell its own attempt from a newer one.
+     */
+    private String markPublicationPending(TariffDTO tariff, String error) {
+        String attemptId = UUID.randomUUID().toString();
         Query query = Query.query(Criteria.where("countryCode").is(tariff.getCountryCode())
                 .and("partyId").is(tariff.getPartyId())
                 .and("tariffId").is(tariff.getId()));
         Update update = new Update()
                 .set("status", TariffPublicationStatus.PENDING)
+                .set("attemptId", attemptId)
                 .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
                 .set("lastError", error)
                 .setOnInsert("countryCode", tariff.getCountryCode())
@@ -156,12 +183,20 @@ public class TariffSyncServiceImpl implements TariffSyncService {
                 .setOnInsert("tariffId", tariff.getId());
         mongoTemplate.upsert(query, update, MongoTariffPublicationOutbox.class,
                 mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
+        return attemptId;
     }
 
-    private void markPublicationDelivered(TariffDTO tariff) {
+    /**
+     * Conditional transition to DELIVERED: it applies only while the record still carries the token
+     * of the attempt that is reporting success. A slow PUT whose tariff has since been re-published
+     * (and failed) therefore leaves the record PENDING for the retry loop instead of marking the
+     * newer, undelivered publication as delivered.
+     */
+    private void markPublicationDelivered(TariffDTO tariff, String attemptId) {
         Query query = Query.query(Criteria.where("countryCode").is(tariff.getCountryCode())
                 .and("partyId").is(tariff.getPartyId())
-                .and("tariffId").is(tariff.getId()));
+                .and("tariffId").is(tariff.getId())
+                .and("attemptId").is(attemptId));
         Update update = new Update()
                 .set("status", TariffPublicationStatus.DELIVERED)
                 .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
