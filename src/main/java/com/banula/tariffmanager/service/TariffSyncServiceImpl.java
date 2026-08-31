@@ -140,11 +140,26 @@ public class TariffSyncServiceImpl implements TariffSyncService {
             } catch (Exception e) {
                 log.warn("Retry PUT failed for tariff {}/{}/{}: {}", record.getCountryCode(), record.getPartyId(),
                         record.getTariffId(), e.getMessage());
-                record.setLastAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
-                record.setLastError(e.getMessage());
-                tariffPublicationOutboxRepository.save(record);
+                markRetryFailed(record, e.getMessage());
             }
         }
+    }
+
+    /**
+     * Records a failed retry without rewriting the whole document: a concurrent publication may
+     * already have written a newer status/attemptId, and a full save would roll that back. The
+     * attempt token in the query keeps the write scoped to the attempt that actually failed.
+     */
+    private void markRetryFailed(MongoTariffPublicationOutbox record, String error) {
+        Query query = Query.query(Criteria.where("countryCode").is(record.getCountryCode())
+                .and("partyId").is(record.getPartyId())
+                .and("tariffId").is(record.getTariffId())
+                .and("attemptId").is(record.getAttemptId()));
+        Update update = new Update()
+                .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
+                .set("lastError", error);
+        mongoTemplate.updateFirst(query, update, MongoTariffPublicationOutbox.class,
+                mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
     }
 
     /**

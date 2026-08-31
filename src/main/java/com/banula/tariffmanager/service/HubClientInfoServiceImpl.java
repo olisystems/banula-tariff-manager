@@ -110,6 +110,10 @@ public class HubClientInfoServiceImpl implements HubClientInfoService {
             List<HubClientInfoDTO> parties = tmPlatformClient.getHubClientInfos();
             log.info("HubClientInfo sync pulled {} party record(s) from hub", parties.size());
             for (HubClientInfoDTO party : parties) {
+                if (party == null || party.getPartyId() == null || party.getCountryCode() == null) {
+                    log.warn("Skipping hub client info record without a complete party identity");
+                    continue;
+                }
                 try {
                     updateHubClientInfoByPartyIdAndCountryCode(party.getPartyId(), party.getCountryCode(), party);
                 } catch (Exception e) {

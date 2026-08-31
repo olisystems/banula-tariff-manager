@@ -82,7 +82,12 @@ public class TmPlatformClient {
             if (page == null || page.isEmpty()) {
                 break;
             }
-            all.addAll(page);
+            int remaining = MAX_RECORDS - all.size();
+            if (page.size() > remaining) {
+                all.addAll(page.subList(0, remaining));
+            } else {
+                all.addAll(page);
+            }
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
@@ -134,7 +139,12 @@ public class TmPlatformClient {
             if (page == null || page.isEmpty()) {
                 break;
             }
-            all.addAll(page);
+            int remaining = MAX_RECORDS - all.size();
+            if (page.size() > remaining) {
+                all.addAll(page.subList(0, remaining));
+            } else {
+                all.addAll(page);
+            }
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
