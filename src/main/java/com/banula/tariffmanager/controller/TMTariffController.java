@@ -84,11 +84,14 @@ public class TMTariffController {
             @RequestParam(value = "date_from", required = false) LocalDateTime dateFrom,
             @RequestParam(value = "date_to", required = false) LocalDateTime dateTo,
             @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset,
-            @RequestParam(value = "limit", required = false) Integer limit) {
+            @RequestParam(value = "limit", required = false) Integer limit,
+            @RequestParam(value = "country_code", required = false) String countryCode,
+            @RequestParam(value = "party_id", required = false) String partyId,
+            @RequestParam(value = "tariff_id", required = false) String tariffId) {
 
         log.info("Fetching tariffs dateFrom {}, dateTo {}, offset {}, limit {}", dateFrom, dateTo, offset, limit);
         return ResponseEntity
-                .ok(new OcpiResponse<>(tmTariffService.findTariffsBetweenDates(dateFrom, dateTo, offset, limit)));
+                .ok(new OcpiResponse<>(tmTariffService.findTariffsBetweenDates(dateFrom, dateTo, offset, limit, countryCode, partyId, tariffId)));
     }
 
 }

@@ -1,6 +1,7 @@
 package com.banula.tariffmanager.service;
 
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
+import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.enums.ConnectionStatus;
 import com.banula.openlib.ocpi.model.enums.Role;
 import com.banula.tariffmanager.client.TmPlatformClient;
@@ -80,23 +81,36 @@ public class TariffSyncServiceImpl implements TariffSyncService {
     }
 
     @Override
-    public void pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom,
+    public SyncResult pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom,
             LocalDateTime dateTo) {
+        if (isSelf(countryCode, partyId)) {
+            throw new OCPICustomException("Select a CPO party instead of the hub itself");
+        }
         List<TariffDTO> tariffs = tmPlatformClient.getTariffs(countryCode, partyId, dateFrom, dateTo);
         if (tariffs == null || tariffs.isEmpty()) {
             log.info("No tariffs returned from {}/{} for window {} -> {}", countryCode, partyId, dateFrom, dateTo);
-            return;
+            return new SyncResult(0, 0, 0, 0);
         }
 
+        int synced = 0, failed = 0, pending = 0;
+        for (TariffDTO tariff : tariffs) {
+            if (tariff == null || tariff.getId() == null || tariff.getId().isBlank()
+                    || (tariff.getCountryCode() != null && !tariff.getCountryCode().isBlank() && !countryCode.equalsIgnoreCase(tariff.getCountryCode()))
+                    || (tariff.getPartyId() != null && !tariff.getPartyId().isBlank() && !partyId.equalsIgnoreCase(tariff.getPartyId()))) {
+                throw new OCPICustomException("CPO returned a tariff with an invalid owner or ID");
+            }
+        }
         log.info("Pulled {} tariff(s) from {}/{}; storing locally then PUT to hub for OCN broadcast", tariffs.size(),
                 countryCode, partyId);
         for (TariffDTO tariff : tariffs) {
             ensureOwner(tariff, countryCode, partyId);
             try {
                 tariffService.saveTariff(tariff);
+                synced++;
             } catch (Exception e) {
                 log.warn("Failed to store tariff {} from {}/{}: {}", tariff.getId(), countryCode, partyId,
                         e.getMessage());
+                failed++;
                 continue;
             }
             markPublicationPending(tariff, null);
@@ -108,10 +122,12 @@ public class TariffSyncServiceImpl implements TariffSyncService {
                 log.warn("Failed to put tariff {} to hub from {}/{}; will retry: {}", tariff.getId(), countryCode,
                         partyId, e.getMessage());
                 markPublicationPending(tariff, e.getMessage());
+                pending++;
             }
         }
 
         log.info("Finished pull/store/hub-put for {} tariff(s) from {}/{}", tariffs.size(), countryCode, partyId);
+        return new SyncResult(tariffs.size(), synced, failed, pending);
     }
 
     private void retryPendingHubPublications() {

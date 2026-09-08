@@ -20,6 +20,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -45,7 +48,9 @@ public class TmPlatformClient {
             LocalDateTime dateTo) {
         List<TariffDTO> all = new ArrayList<>();
         int offset = 0;
+        Set<List<String>> seen = new HashSet<>();
         while (true) {
+            if (offset >= 100000) throw new OCPICustomException("Tariff pull exceeded its item limit");
             UriComponentsBuilder builder = UriComponentsBuilder
                     .fromHttpUrl(applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
                             + "/tariffs")
@@ -75,14 +80,20 @@ public class TmPlatformClient {
             }
 
             List<TariffDTO> page = response.getData();
-            if (page == null || page.isEmpty()) {
+            if (page == null) throw new OCPICustomException("Tariff pull returned no data field");
+            if (page.isEmpty()) {
                 break;
+            }
+            for (TariffDTO tariff : page) {
+                if (tariff == null || tariff.getId() == null || !seen.add(Arrays.asList(tariff.getCountryCode(), tariff.getPartyId(), tariff.getId()))) {
+                    throw new OCPICustomException("CPO returned invalid or duplicate tariffs");
+                }
             }
             all.addAll(page);
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
-            offset += PAGE_LIMIT;
+            offset += page.size();
         }
         return all;
     }
@@ -187,11 +198,11 @@ public class TmPlatformClient {
 
     /**
      * Prefer OCPI 2.2.1 pagination headers ({@code Link} / {@code X-Total-Count}). Fall back to a
-     * full page only when those headers are absent (e.g. an internal proxy stripped them).
+     * request until an empty page when those headers are absent (upstream may clamp page size).
      */
     private boolean hasNextPage(HttpHeaders headers, int offset, int pageSize) {
         if (headers == null) {
-            return pageSize >= PAGE_LIMIT;
+            return pageSize > 0;
         }
         String link = headers.getFirst(HttpHeaders.LINK);
         if (link != null && link.toLowerCase(Locale.ROOT).contains("rel=\"next\"")) {
@@ -208,6 +219,6 @@ public class TmPlatformClient {
                 log.debug("Ignoring unparsable X-Total-Count header: {}", totalCount);
             }
         }
-        return pageSize >= PAGE_LIMIT;
+        return pageSize > 0;
     }
 }

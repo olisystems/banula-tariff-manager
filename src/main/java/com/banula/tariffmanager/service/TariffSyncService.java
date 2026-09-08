@@ -10,5 +10,7 @@ public interface TariffSyncService {
 
     void syncRecentTariffs();
 
-    void pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom, LocalDateTime dateTo);
+    record SyncResult(int fetched, int synced, int failed, int publicationPending) {}
+
+    SyncResult pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom, LocalDateTime dateTo);
 }
