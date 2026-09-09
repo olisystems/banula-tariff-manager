@@ -32,4 +32,28 @@ class TmPlatformClientTest {
             .andRespond(withSuccess("{\"status_code\":1000,\"data\":[{\"id\":\"same\"}]}",MediaType.APPLICATION_JSON));
         assertThrows(OCPICustomException.class,()->new TmPlatformClient(rest,config).getTariffs("DE","OLI",null,null));
     }
+
+    @Test void parsesQuotedUnquotedAndMultipleLinkRelations() {
+        for (String link : new String[]{"<http://next>; rel=next", "<http://next>; rel=\"next\"", "<http://prev>; rel=prev, <http://next>; title=\"last page\"; rel=\"next alternate\""}) {
+            var rest = new RestTemplate(); var server = MockRestServiceServer.createServer(rest);
+            var config = mock(ApplicationConfiguration.class); when(config.getPlatformUrl()).thenReturn("http://platform");
+            server.expect(requestTo("http://platform/api/v1/internal/outflow/ocpi/sender/2.2.1/tariffs?offset=0&limit=100"))
+                .andRespond(withSuccess("{\"status_code\":1000,\"data\":[{\"id\":\"one\"}]}",MediaType.APPLICATION_JSON).header("Link",link));
+            server.expect(requestTo("http://platform/api/v1/internal/outflow/ocpi/sender/2.2.1/tariffs?offset=1&limit=100"))
+                .andRespond(withSuccess("{\"status_code\":1000,\"data\":[{\"id\":\"two\"}]}",MediaType.APPLICATION_JSON).header("Link","<http://prev>; title=\"rel=next\"; rel=prev"));
+            assertEquals(2,new TmPlatformClient(rest,config).getTariffs("DE","OLI",null,null).size()); server.verify();
+        }
+    }
+
+    @Test void formatsDatesWithSecondsAndMillisecondUtcPrecision() {
+        var rest = new RestTemplate(); var server = MockRestServiceServer.createServer(rest);
+        var config = mock(ApplicationConfiguration.class); when(config.getPlatformUrl()).thenReturn("http://platform");
+        server.expect(request -> {
+            String query = java.net.URLDecoder.decode(request.getURI().getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(query.contains("date_from=2026-01-01T00:00:00.000Z"),query);
+            assertTrue(query.contains("date_to=2026-01-01T00:00:00.123Z"),query);
+        }).andRespond(withSuccess("{\"status_code\":1000,\"data\":[]}",MediaType.APPLICATION_JSON));
+        new TmPlatformClient(rest,config).getTariffs("DE","OLI",java.time.LocalDateTime.of(2026,1,1,0,0),java.time.LocalDateTime.of(2026,1,1,0,0,0,123456789));
+        server.verify();
+    }
 }

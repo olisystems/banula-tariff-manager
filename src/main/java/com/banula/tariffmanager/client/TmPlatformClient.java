@@ -19,6 +19,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.HashSet;
@@ -40,6 +42,8 @@ public class TmPlatformClient {
     private static final String OUTFLOW_BASE = "/api/v1/internal/outflow/ocpi";
     private static final String VERSION = "2.2.1";
     private static final int PAGE_LIMIT = 100;
+    private static final DateTimeFormatter OCPI_DATE_TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSS'Z'");
+    private static final Pattern LINK_PARAMETER = Pattern.compile(";\\s*([^=;\\s]+)\\s*=\\s*(?:\"([^\"]*)\"|([^;\\s,]+))");
 
     private final RestTemplate restTemplate;
     private final ApplicationConfiguration applicationConfiguration;
@@ -57,10 +61,10 @@ public class TmPlatformClient {
                     .queryParam("offset", offset)
                     .queryParam("limit", PAGE_LIMIT);
             if (dateFrom != null) {
-                builder.queryParam("date_from", dateFrom.toString());
+                builder.queryParam("date_from", dateFrom.format(OCPI_DATE_TIME));
             }
             if (dateTo != null) {
-                builder.queryParam("date_to", dateTo.toString());
+                builder.queryParam("date_to", dateTo.format(OCPI_DATE_TIME));
             }
 
             ResponseEntity<OcpiResponse<List<TariffDTO>>> responseEntity = exchangeEntity(
@@ -204,11 +208,20 @@ public class TmPlatformClient {
         if (headers == null) {
             return pageSize > 0;
         }
-        String link = headers.getFirst(HttpHeaders.LINK);
-        if (link != null && link.toLowerCase(Locale.ROOT).contains("rel=\"next\"")) {
-            return true;
-        }
-        if (link != null) {
+        List<String> links = headers.get(HttpHeaders.LINK);
+        if (links != null) {
+            for (String header : links) {
+                for (String link : header.split(",(?=\\s*<)")) {
+                    int end = link.indexOf('>');
+                    if (end < 0) continue;
+                    var params = LINK_PARAMETER.matcher(link.substring(end + 1));
+                    while (params.find()) {
+                        if (!"rel".equalsIgnoreCase(params.group(1))) continue;
+                        String value = params.group(2) != null ? params.group(2) : params.group(3);
+                        if (Arrays.stream(value.trim().split("\\s+")).anyMatch("next"::equalsIgnoreCase)) return true;
+                    }
+                }
+            }
             return false;
         }
         String totalCount = headers.getFirst("X-Total-Count");
