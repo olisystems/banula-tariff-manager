@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -132,7 +134,8 @@ public class TariffSyncServiceImpl implements TariffSyncService {
             try {
                 TariffDTO tariff = tariffService.getTariff(record.getCountryCode(), record.getPartyId(), record.getTariffId());
                 if (tariff == null) {
-                    tariffPublicationOutboxRepository.delete(record);
+                    mongoTemplate.remove(publicationQuery(record), MongoTariffPublicationOutbox.class,
+                            mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
                     continue;
                 }
                 attemptPublication(record, tariff);
@@ -148,6 +151,8 @@ public class TariffSyncServiceImpl implements TariffSyncService {
         var record = existing.orElseGet(MongoTariffPublicationOutbox::new);
         // Repeated pulls must not reset the retry budget of the same revision.
         if (existing.isEmpty() || !Objects.equals(record.getTariffLastUpdated(), tariff.getLastUpdated())) {
+            Query previousRevision = existing.isPresent() ? publicationQuery(record) : null;
+            record.setAttemptId(UUID.randomUUID().toString());
             record.setCountryCode(tariff.getCountryCode());
             record.setPartyId(tariff.getPartyId());
             record.setTariffId(tariff.getId());
@@ -157,28 +162,59 @@ public class TariffSyncServiceImpl implements TariffSyncService {
             record.setLastAttemptAt(null);
             record.setNextAttemptAt(null);
             record.setLastError(null);
-            tariffPublicationOutboxRepository.save(record);
+            if (existing.isEmpty()) {
+                tariffPublicationOutboxRepository.save(record);
+            } else {
+                // Reset only the revision we read; a concurrent pull may already have replaced it.
+                Update reset = new Update().set("attemptId", record.getAttemptId())
+                        .set("tariffLastUpdated", record.getTariffLastUpdated())
+                        .set("attempts", 0).set("status", TariffPublicationStatus.PENDING)
+                        .unset("lastAttemptAt").unset("nextAttemptAt").unset("lastError");
+                if (mongoTemplate.updateFirst(previousRevision, reset, MongoTariffPublicationOutbox.class,
+                        mongoCollectionMapper.getTariffPublicationOutboxCollectionName()).getMatchedCount() == 0) {
+                    return null;
+                }
+            }
         }
         return record;
     }
 
     private boolean attemptPublication(MongoTariffPublicationOutbox record, TariffDTO tariff) {
+        if (record == null) return false; // Another pull replaced the revision before we could claim it.
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         if (record.getStatus() == TariffPublicationStatus.FAILED
                 || (record.getNextAttemptAt() != null && record.getNextAttemptAt().isAfter(now))) return false;
         if (record.getAttempts() >= maxAttempts()) {
             record.setStatus(TariffPublicationStatus.FAILED);
             record.setNextAttemptAt(null);
-            tariffPublicationOutboxRepository.save(record);
+            mongoTemplate.updateFirst(publicationQuery(record),
+                    new Update().set("status", TariffPublicationStatus.FAILED).unset("nextAttemptAt"),
+                    MongoTariffPublicationOutbox.class, mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
             return false;
         }
+        Query claim = publicationQuery(record);
+        // Legacy records have no attempts field; accept both missing and explicit zero.
+        if (record.getAttempts() == 0) {
+            claim.addCriteria(new Criteria().orOperator(
+                    Criteria.where("attempts").is(null), Criteria.where("attempts").is(0)));
+        } else {
+            claim.addCriteria(Criteria.where("attempts").is(record.getAttempts()));
+        }
+        claim.addCriteria(Criteria.where("nextAttemptAt").is(record.getNextAttemptAt()));
+        record.setAttemptId(UUID.randomUUID().toString());
         record.setAttempts(record.getAttempts() + 1);
         record.setLastAttemptAt(now);
         record.setNextAttemptAt(now.plusSeconds(backoffSeconds(record.getAttempts())));
-        tariffPublicationOutboxRepository.save(record);
+        Update attempt = new Update().set("attemptId", record.getAttemptId())
+                .set("attempts", record.getAttempts()).set("lastAttemptAt", record.getLastAttemptAt())
+                .set("nextAttemptAt", record.getNextAttemptAt()).set("status", TariffPublicationStatus.PENDING);
+        if (mongoTemplate.updateFirst(claim, attempt, MongoTariffPublicationOutbox.class,
+                mongoCollectionMapper.getTariffPublicationOutboxCollectionName()).getMatchedCount() == 0) {
+            return false; // A different worker or revision owns publication now.
+        }
         try {
             tmPlatformClient.putTariffToHub(tariff);
-            markPublicationDelivered(tariff);
+            markPublicationDelivered(record);
             return true;
         } catch (Exception e) {
             recordFailure(record, e, false);
@@ -203,13 +239,23 @@ public class TariffSyncServiceImpl implements TariffSyncService {
         record.setStatus(record.getAttempts() >= maxAttempts() ? TariffPublicationStatus.FAILED : TariffPublicationStatus.PENDING);
         record.setNextAttemptAt(record.getStatus() == TariffPublicationStatus.FAILED ? null
                 : record.getLastAttemptAt().plusSeconds(backoffSeconds(record.getAttempts())));
-        tariffPublicationOutboxRepository.save(record);
+        Update failure = new Update().set("attempts", record.getAttempts())
+                .set("lastAttemptAt", record.getLastAttemptAt()).set("lastError", record.getLastError())
+                .set("status", record.getStatus()).set("nextAttemptAt", record.getNextAttemptAt());
+        mongoTemplate.updateFirst(publicationQuery(record), failure, MongoTariffPublicationOutbox.class,
+                mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
     }
 
-    private void markPublicationDelivered(TariffDTO tariff) {
-        Query query = Query.query(Criteria.where("countryCode").is(tariff.getCountryCode())
-                .and("partyId").is(tariff.getPartyId()).and("tariffId").is(tariff.getId()));
-        mongoTemplate.remove(query, MongoTariffPublicationOutbox.class,
+    private Query publicationQuery(MongoTariffPublicationOutbox record) {
+        return Query.query(Criteria.where("countryCode").is(record.getCountryCode())
+                .and("partyId").is(record.getPartyId()).and("tariffId").is(record.getTariffId())
+                .and("attemptId").is(record.getAttemptId())
+                .and("tariffLastUpdated").is(record.getTariffLastUpdated()));
+    }
+
+    private void markPublicationDelivered(MongoTariffPublicationOutbox record) {
+        // An old PUT must never delete a newer revision's pending retry.
+        mongoTemplate.remove(publicationQuery(record), MongoTariffPublicationOutbox.class,
                 mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
     }
 

@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -42,6 +41,8 @@ public class TmPlatformClient {
     private static final String OUTFLOW_BASE = "/api/v1/internal/outflow/ocpi";
     private static final String VERSION = "2.2.1";
     private static final int PAGE_LIMIT = 100;
+    private static final int MAX_RECORDS = 10_000;
+    private static final int MAX_TARIFF_RECORDS = 100_000;
     private static final DateTimeFormatter OCPI_DATE_TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSS'Z'");
     private static final Pattern LINK_PARAMETER = Pattern.compile(";\\s*([^=;\\s]+)\\s*=\\s*(?:\"([^\"]*)\"|([^;\\s,]+))");
 
@@ -54,7 +55,7 @@ public class TmPlatformClient {
         int offset = 0;
         Set<List<String>> seen = new HashSet<>();
         while (true) {
-            if (offset >= 100000) throw new OCPICustomException("Tariff pull exceeded its item limit");
+            if (offset >= MAX_TARIFF_RECORDS) throw new OCPICustomException("Tariff pull exceeded its item limit");
             UriComponentsBuilder builder = UriComponentsBuilder
                     .fromHttpUrl(applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
                             + "/tariffs")
@@ -93,6 +94,9 @@ public class TmPlatformClient {
                     throw new OCPICustomException("CPO returned invalid or duplicate tariffs");
                 }
             }
+            if (page.size() > MAX_TARIFF_RECORDS - all.size()) {
+                throw new OCPICustomException("Tariff pull exceeded its item limit");
+            }
             all.addAll(page);
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
@@ -109,24 +113,54 @@ public class TmPlatformClient {
     public List<HubClientInfoDTO> getHubClientInfos() {
         String hubCountry = applicationConfiguration.getCountryCode();
         String hubParty = applicationConfiguration.getPartyId();
-        String url = applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
-                + "/hubclientinfo";
+        List<HubClientInfoDTO> all = new ArrayList<>();
+        int offset = 0;
+        while (true) {
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
+                            + "/hubclientinfo")
+                    .queryParam("offset", offset)
+                    .queryParam("limit", PAGE_LIMIT)
+                    .encode()
+                    .toUriString();
 
-        OcpiResponse<List<HubClientInfoDTO>> response = exchange(
-                url,
-                HttpMethod.GET,
-                hubCountry,
-                hubParty,
-                null,
-                new ParameterizedTypeReference<OcpiResponse<List<HubClientInfoDTO>>>() {
-                });
+            ResponseEntity<OcpiResponse<List<HubClientInfoDTO>>> responseEntity = exchangeEntity(
+                    url,
+                    HttpMethod.GET,
+                    hubCountry,
+                    hubParty,
+                    null,
+                    new ParameterizedTypeReference<OcpiResponse<List<HubClientInfoDTO>>>() {
+                    });
 
-        if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
-            String message = response != null ? response.getStatus_message() : "empty response";
-            throw new OCPICustomException(
-                    "Failed to pull hubclientinfo from hub " + hubCountry + "/" + hubParty + ": " + message);
+            OcpiResponse<List<HubClientInfoDTO>> response = responseEntity.getBody();
+            if (response == null || response.getStatus_code() != Constants.STATUS_CODE_OK) {
+                String message = response != null ? response.getStatus_message() : "empty response";
+                throw new OCPICustomException(
+                        "Failed to pull hubclientinfo from hub " + hubCountry + "/" + hubParty + ": " + message);
+            }
+
+            List<HubClientInfoDTO> page = response.getData();
+            if (page == null || page.isEmpty()) {
+                break;
+            }
+            int remaining = MAX_RECORDS - all.size();
+            if (page.size() > remaining) {
+                all.addAll(page.subList(0, remaining));
+            } else {
+                all.addAll(page);
+            }
+            if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
+                break;
+            }
+            offset += page.size();
+            if (all.size() >= MAX_RECORDS) {
+                log.warn("Stopping hubclientinfo pull from hub {}/{} at {} record(s): the server still advertises more",
+                        hubCountry, hubParty, all.size());
+                break;
+            }
         }
-        return response.getData() != null ? response.getData() : Collections.emptyList();
+        return all;
     }
 
     /**

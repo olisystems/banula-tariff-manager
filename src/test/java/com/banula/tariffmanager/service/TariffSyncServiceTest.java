@@ -30,6 +30,9 @@ class TariffSyncServiceTest {
     private final TariffSyncService service = new TariffSyncServiceImpl(platform, tariffs, parties, config, mongo, collections, outbox);
 
     TariffSyncServiceTest() {
+        when(mongo.updateFirst(any(Query.class), any(org.springframework.data.mongodb.core.query.UpdateDefinition.class),
+                eq(MongoTariffPublicationOutbox.class), eq("outbox")))
+                .thenReturn(com.mongodb.client.result.UpdateResult.acknowledged(1, 1L, null));
         when(config.getTariffPublicationMaxAttempts()).thenReturn(3);
         when(config.getTariffPublicationBackoffSeconds()).thenReturn(3600L);
         when(config.getTariffPublicationBatchSize()).thenReturn(25);
@@ -88,6 +91,7 @@ class TariffSyncServiceTest {
         var tariff = tariff("retry");
         tariff.setLastUpdated(LocalDateTime.of(2026, 1, 1, 0, 0));
         var record = new MongoTariffPublicationOutbox();
+        record.setCountryCode("DE"); record.setPartyId("OLI"); record.setTariffId("retry");
         record.setTariffLastUpdated(tariff.getLastUpdated());
         record.setAttempts(3); record.setStatus(TariffPublicationStatus.FAILED);
         when(outbox.findByCountryCodeAndPartyIdAndTariffId("DE", "OLI", "retry")).thenReturn(Optional.of(record));
@@ -103,5 +107,6 @@ class TariffSyncServiceTest {
         assertEquals("retry", removed.getValue().getQueryObject().get("tariffId"));
         assertEquals("OLI", removed.getValue().getQueryObject().get("partyId"));
         assertEquals("DE", removed.getValue().getQueryObject().get("countryCode"));
+        assertNotNull(removed.getValue().getQueryObject().get("attemptId"));
     }
 }
