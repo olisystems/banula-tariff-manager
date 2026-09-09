@@ -19,7 +19,12 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -36,11 +41,10 @@ public class TmPlatformClient {
     private static final String OUTFLOW_BASE = "/api/v1/internal/outflow/ocpi";
     private static final String VERSION = "2.2.1";
     private static final int PAGE_LIMIT = 100;
-    /**
-     * Safety net for a server that ignores {@code offset} and keeps answering with a full page:
-     * without it the paging loops below would never terminate.
-     */
     private static final int MAX_RECORDS = 10_000;
+    private static final int MAX_TARIFF_RECORDS = 100_000;
+    private static final DateTimeFormatter OCPI_DATE_TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSS'Z'");
+    private static final Pattern LINK_PARAMETER = Pattern.compile(";\\s*([^=;\\s]+)\\s*=\\s*(?:\"([^\"]*)\"|([^;\\s,]+))");
 
     private final RestTemplate restTemplate;
     private final ApplicationConfiguration applicationConfiguration;
@@ -49,17 +53,19 @@ public class TmPlatformClient {
             LocalDateTime dateTo) {
         List<TariffDTO> all = new ArrayList<>();
         int offset = 0;
+        Set<List<String>> seen = new HashSet<>();
         while (true) {
+            if (offset >= MAX_TARIFF_RECORDS) throw new OCPICustomException("Tariff pull exceeded its item limit");
             UriComponentsBuilder builder = UriComponentsBuilder
                     .fromHttpUrl(applicationConfiguration.getPlatformUrl() + OUTFLOW_BASE + "/sender/" + VERSION
                             + "/tariffs")
                     .queryParam("offset", offset)
                     .queryParam("limit", PAGE_LIMIT);
             if (dateFrom != null) {
-                builder.queryParam("date_from", dateFrom.toString());
+                builder.queryParam("date_from", dateFrom.format(OCPI_DATE_TIME));
             }
             if (dateTo != null) {
-                builder.queryParam("date_to", dateTo.toString());
+                builder.queryParam("date_to", dateTo.format(OCPI_DATE_TIME));
             }
 
             ResponseEntity<OcpiResponse<List<TariffDTO>>> responseEntity = exchangeEntity(
@@ -79,24 +85,23 @@ public class TmPlatformClient {
             }
 
             List<TariffDTO> page = response.getData();
-            if (page == null || page.isEmpty()) {
+            if (page == null) throw new OCPICustomException("Tariff pull returned no data field");
+            if (page.isEmpty()) {
                 break;
             }
-            int remaining = MAX_RECORDS - all.size();
-            if (page.size() > remaining) {
-                all.addAll(page.subList(0, remaining));
-            } else {
-                all.addAll(page);
+            for (TariffDTO tariff : page) {
+                if (tariff == null || tariff.getId() == null || !seen.add(Arrays.asList(tariff.getCountryCode(), tariff.getPartyId(), tariff.getId()))) {
+                    throw new OCPICustomException("CPO returned invalid or duplicate tariffs");
+                }
             }
+            if (page.size() > MAX_TARIFF_RECORDS - all.size()) {
+                throw new OCPICustomException("Tariff pull exceeded its item limit");
+            }
+            all.addAll(page);
             if (!hasNextPage(responseEntity.getHeaders(), offset, page.size())) {
                 break;
             }
             offset += page.size();
-            if (all.size() >= MAX_RECORDS) {
-                log.warn("Stopping tariff pull from {}/{} at {} record(s): the server still advertises more",
-                        toCountryCode, toPartyId, all.size());
-                break;
-            }
         }
         return all;
     }
@@ -231,19 +236,26 @@ public class TmPlatformClient {
 
     /**
      * Prefer OCPI 2.2.1 pagination headers ({@code Link} / {@code X-Total-Count}). Fall back to a
-     * full page only when those headers are absent — which is the case today, because the platform
-     * outflow handler answers from a freshly built header set and does not relay the node's
-     * pagination headers, so there is no next-page link to follow.
+     * request until an empty page when those headers are absent (upstream may clamp page size).
      */
     private boolean hasNextPage(HttpHeaders headers, int offset, int pageSize) {
         if (headers == null) {
-            return pageSize >= PAGE_LIMIT;
+            return pageSize > 0;
         }
-        String link = headers.getFirst(HttpHeaders.LINK);
-        if (link != null && link.toLowerCase(Locale.ROOT).contains("rel=\"next\"")) {
-            return true;
-        }
-        if (link != null) {
+        List<String> links = headers.get(HttpHeaders.LINK);
+        if (links != null) {
+            for (String header : links) {
+                for (String link : header.split(",(?=\\s*<)")) {
+                    int end = link.indexOf('>');
+                    if (end < 0) continue;
+                    var params = LINK_PARAMETER.matcher(link.substring(end + 1));
+                    while (params.find()) {
+                        if (!"rel".equalsIgnoreCase(params.group(1))) continue;
+                        String value = params.group(2) != null ? params.group(2) : params.group(3);
+                        if (Arrays.stream(value.trim().split("\\s+")).anyMatch("next"::equalsIgnoreCase)) return true;
+                    }
+                }
+            }
             return false;
         }
         String totalCount = headers.getFirst("X-Total-Count");
@@ -254,6 +266,6 @@ public class TmPlatformClient {
                 log.debug("Ignoring unparsable X-Total-Count header: {}", totalCount);
             }
         }
-        return pageSize >= PAGE_LIMIT;
+        return pageSize > 0;
     }
 }

@@ -63,6 +63,13 @@ public class ApplicationConfiguration implements PlatformConfiguration {
     @Value("${tariff-sync.welcome-lookback-days:3650}")
     private Long tariffSyncWelcomeLookbackDays;
 
+    @Value("${tariff-sync.publication-max-attempts:5}")
+    private int tariffPublicationMaxAttempts;
+    @Value("${tariff-sync.publication-backoff-seconds:3600}")
+    private long tariffPublicationBackoffSeconds;
+    @Value("${tariff-sync.publication-batch-size:100}")
+    private int tariffPublicationBatchSize;
+
     @Override
     public VersionNumber getOcpiVersion() {
         return VersionNumber.fromValue(ocpiVersion);

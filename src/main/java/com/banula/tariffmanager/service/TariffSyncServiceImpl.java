@@ -1,6 +1,7 @@
 package com.banula.tariffmanager.service;
 
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
+import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.enums.ConnectionStatus;
 import com.banula.openlib.ocpi.model.enums.Role;
 import com.banula.tariffmanager.client.TmPlatformClient;
@@ -16,6 +17,8 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -81,127 +84,178 @@ public class TariffSyncServiceImpl implements TariffSyncService {
     }
 
     @Override
-    public void pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom,
+    public SyncResult pullStoreAndBroadcast(String countryCode, String partyId, LocalDateTime dateFrom,
             LocalDateTime dateTo) {
+        if (isSelf(countryCode, partyId)) {
+            throw new OCPICustomException("Select a CPO party instead of the hub itself");
+        }
         List<TariffDTO> tariffs = tmPlatformClient.getTariffs(countryCode, partyId, dateFrom, dateTo);
         if (tariffs == null || tariffs.isEmpty()) {
             log.info("No tariffs returned from {}/{} for window {} -> {}", countryCode, partyId, dateFrom, dateTo);
-            return;
+            return new SyncResult(0, 0, 0, 0);
         }
 
+        int synced = 0, failed = 0, pending = 0;
+        for (TariffDTO tariff : tariffs) {
+            if (tariff == null || tariff.getId() == null || tariff.getId().isBlank()
+                    || (tariff.getCountryCode() != null && !tariff.getCountryCode().isBlank() && !countryCode.equalsIgnoreCase(tariff.getCountryCode()))
+                    || (tariff.getPartyId() != null && !tariff.getPartyId().isBlank() && !partyId.equalsIgnoreCase(tariff.getPartyId()))) {
+                throw new OCPICustomException("CPO returned a tariff with an invalid owner or ID");
+            }
+        }
         log.info("Pulled {} tariff(s) from {}/{}; storing locally then PUT to hub for OCN broadcast", tariffs.size(),
                 countryCode, partyId);
         for (TariffDTO tariff : tariffs) {
             ensureOwner(tariff, countryCode, partyId);
             try {
                 tariffService.saveTariff(tariff);
+                synced++;
             } catch (Exception e) {
                 log.warn("Failed to store tariff {} from {}/{}: {}", tariff.getId(), countryCode, partyId,
                         e.getMessage());
+                failed++;
                 continue;
             }
-            String attemptId = markPublicationPending(tariff, null);
-            try {
-                // OCPI-to = hub (DE/BAN) → node broadcasts via ModuleNotificationService
-                tmPlatformClient.putTariffToHub(tariff);
-                markPublicationDelivered(tariff, attemptId);
-            } catch (Exception e) {
-                log.warn("Failed to put tariff {} to hub from {}/{}; will retry: {}", tariff.getId(), countryCode,
-                        partyId, e.getMessage());
-                // A fresh attempt token is written on purpose: it fences any older PUT for the same
-                // tariff that is still in flight, so that one can no longer report DELIVERED over
-                // this failure.
-                markPublicationPending(tariff, e.getMessage());
-            }
+            MongoTariffPublicationOutbox record = preparePublication(tariff);
+            if (!attemptPublication(record, tariff)) pending++;
+
         }
 
         log.info("Finished pull/store/hub-put for {} tariff(s) from {}/{}", tariffs.size(), countryCode, partyId);
+        return new SyncResult(tariffs.size(), synced, failed, pending);
     }
 
     private void retryPendingHubPublications() {
-        List<MongoTariffPublicationOutbox> pending = tariffPublicationOutboxRepository
-                .findByStatus(TariffPublicationStatus.PENDING);
-        if (pending.isEmpty()) {
-            return;
-        }
-        log.info("Retrying {} pending hub tariff publication(s)", pending.size());
+        List<MongoTariffPublicationOutbox> pending = tariffPublicationOutboxRepository.findDue(
+                LocalDateTime.now(ZoneOffset.UTC), PageRequest.of(0,
+                        Math.max(1, applicationConfiguration.getTariffPublicationBatchSize()),
+                        Sort.by("nextAttemptAt").ascending().and(Sort.by("mongoId"))));
         for (MongoTariffPublicationOutbox record : pending) {
             try {
-                TariffDTO tariff = tariffService.getTariff(record.getCountryCode(), record.getPartyId(),
-                        record.getTariffId());
+                TariffDTO tariff = tariffService.getTariff(record.getCountryCode(), record.getPartyId(), record.getTariffId());
                 if (tariff == null) {
-                    log.warn("Dropping pending publication for missing tariff {}/{}/{}", record.getCountryCode(),
-                            record.getPartyId(), record.getTariffId());
-                    tariffPublicationOutboxRepository.delete(record);
+                    mongoTemplate.remove(publicationQuery(record), MongoTariffPublicationOutbox.class,
+                            mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
                     continue;
                 }
-                tmPlatformClient.putTariffToHub(tariff);
-                markPublicationDelivered(tariff, record.getAttemptId());
+                attemptPublication(record, tariff);
             } catch (Exception e) {
-                log.warn("Retry PUT failed for tariff {}/{}/{}: {}", record.getCountryCode(), record.getPartyId(),
-                        record.getTariffId(), e.getMessage());
-                markRetryFailed(record, e.getMessage());
+                recordFailure(record, e, true);
             }
         }
     }
 
-    /**
-     * Records a failed retry without rewriting the whole document: a concurrent publication may
-     * already have written a newer status/attemptId, and a full save would roll that back. The
-     * attempt token in the query keeps the write scoped to the attempt that actually failed.
-     */
-    private void markRetryFailed(MongoTariffPublicationOutbox record, String error) {
-        Query query = Query.query(Criteria.where("countryCode").is(record.getCountryCode())
-                .and("partyId").is(record.getPartyId())
-                .and("tariffId").is(record.getTariffId())
-                .and("attemptId").is(record.getAttemptId()));
-        Update update = new Update()
-                .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
-                .set("lastError", error);
-        mongoTemplate.updateFirst(query, update, MongoTariffPublicationOutbox.class,
+    private MongoTariffPublicationOutbox preparePublication(TariffDTO tariff) {
+        var existing = tariffPublicationOutboxRepository.findByCountryCodeAndPartyIdAndTariffId(
+                tariff.getCountryCode(), tariff.getPartyId(), tariff.getId());
+        var record = existing.orElseGet(MongoTariffPublicationOutbox::new);
+        // Repeated pulls must not reset the retry budget of the same revision.
+        if (existing.isEmpty() || !Objects.equals(record.getTariffLastUpdated(), tariff.getLastUpdated())) {
+            Query previousRevision = existing.isPresent() ? publicationQuery(record) : null;
+            record.setAttemptId(UUID.randomUUID().toString());
+            record.setCountryCode(tariff.getCountryCode());
+            record.setPartyId(tariff.getPartyId());
+            record.setTariffId(tariff.getId());
+            record.setTariffLastUpdated(tariff.getLastUpdated());
+            record.setAttempts(0);
+            record.setStatus(TariffPublicationStatus.PENDING);
+            record.setLastAttemptAt(null);
+            record.setNextAttemptAt(null);
+            record.setLastError(null);
+            if (existing.isEmpty()) {
+                tariffPublicationOutboxRepository.save(record);
+            } else {
+                // Reset only the revision we read; a concurrent pull may already have replaced it.
+                Update reset = new Update().set("attemptId", record.getAttemptId())
+                        .set("tariffLastUpdated", record.getTariffLastUpdated())
+                        .set("attempts", 0).set("status", TariffPublicationStatus.PENDING)
+                        .unset("lastAttemptAt").unset("nextAttemptAt").unset("lastError");
+                if (mongoTemplate.updateFirst(previousRevision, reset, MongoTariffPublicationOutbox.class,
+                        mongoCollectionMapper.getTariffPublicationOutboxCollectionName()).getMatchedCount() == 0) {
+                    return null;
+                }
+            }
+        }
+        return record;
+    }
+
+    private boolean attemptPublication(MongoTariffPublicationOutbox record, TariffDTO tariff) {
+        if (record == null) return false; // Another pull replaced the revision before we could claim it.
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        if (record.getStatus() == TariffPublicationStatus.FAILED
+                || (record.getNextAttemptAt() != null && record.getNextAttemptAt().isAfter(now))) return false;
+        if (record.getAttempts() >= maxAttempts()) {
+            record.setStatus(TariffPublicationStatus.FAILED);
+            record.setNextAttemptAt(null);
+            mongoTemplate.updateFirst(publicationQuery(record),
+                    new Update().set("status", TariffPublicationStatus.FAILED).unset("nextAttemptAt"),
+                    MongoTariffPublicationOutbox.class, mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
+            return false;
+        }
+        Query claim = publicationQuery(record);
+        // Legacy records have no attempts field; accept both missing and explicit zero.
+        if (record.getAttempts() == 0) {
+            claim.addCriteria(new Criteria().orOperator(
+                    Criteria.where("attempts").is(null), Criteria.where("attempts").is(0)));
+        } else {
+            claim.addCriteria(Criteria.where("attempts").is(record.getAttempts()));
+        }
+        claim.addCriteria(Criteria.where("nextAttemptAt").is(record.getNextAttemptAt()));
+        record.setAttemptId(UUID.randomUUID().toString());
+        record.setAttempts(record.getAttempts() + 1);
+        record.setLastAttemptAt(now);
+        record.setNextAttemptAt(now.plusSeconds(backoffSeconds(record.getAttempts())));
+        Update attempt = new Update().set("attemptId", record.getAttemptId())
+                .set("attempts", record.getAttempts()).set("lastAttemptAt", record.getLastAttemptAt())
+                .set("nextAttemptAt", record.getNextAttemptAt()).set("status", TariffPublicationStatus.PENDING);
+        if (mongoTemplate.updateFirst(claim, attempt, MongoTariffPublicationOutbox.class,
+                mongoCollectionMapper.getTariffPublicationOutboxCollectionName()).getMatchedCount() == 0) {
+            return false; // A different worker or revision owns publication now.
+        }
+        try {
+            tmPlatformClient.putTariffToHub(tariff);
+            markPublicationDelivered(record);
+            return true;
+        } catch (Exception e) {
+            recordFailure(record, e, false);
+            return false;
+        }
+    }
+
+    private int maxAttempts() { return Math.max(1, applicationConfiguration.getTariffPublicationMaxAttempts()); }
+
+    private long backoffSeconds(int attempts) {
+        long base = Math.max(1, Math.min(86400, applicationConfiguration.getTariffPublicationBackoffSeconds()));
+        return Math.min(86400, base * (1L << Math.min(16, Math.max(0, attempts - 1))));
+    }
+
+    private void recordFailure(MongoTariffPublicationOutbox record, Exception error, boolean incrementAttempt) {
+        // Lookup failures also consume the budget instead of retrying forever.
+        if (incrementAttempt) {
+            record.setAttempts(record.getAttempts() + 1);
+            record.setLastAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
+        }
+        record.setLastError(error.getMessage());
+        record.setStatus(record.getAttempts() >= maxAttempts() ? TariffPublicationStatus.FAILED : TariffPublicationStatus.PENDING);
+        record.setNextAttemptAt(record.getStatus() == TariffPublicationStatus.FAILED ? null
+                : record.getLastAttemptAt().plusSeconds(backoffSeconds(record.getAttempts())));
+        Update failure = new Update().set("attempts", record.getAttempts())
+                .set("lastAttemptAt", record.getLastAttemptAt()).set("lastError", record.getLastError())
+                .set("status", record.getStatus()).set("nextAttemptAt", record.getNextAttemptAt());
+        mongoTemplate.updateFirst(publicationQuery(record), failure, MongoTariffPublicationOutbox.class,
                 mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
     }
 
-    /**
-     * Marks the tariff PENDING and returns the token identifying <em>this</em> attempt. Publication
-     * is not serialized per tariff (the welcome ceremony runs async while the hourly sync runs on
-     * the scheduler thread), so the token is what lets
-     * {@link #markPublicationDelivered(TariffDTO, String)} tell its own attempt from a newer one.
-     */
-    private String markPublicationPending(TariffDTO tariff, String error) {
-        String attemptId = UUID.randomUUID().toString();
-        Query query = Query.query(Criteria.where("countryCode").is(tariff.getCountryCode())
-                .and("partyId").is(tariff.getPartyId())
-                .and("tariffId").is(tariff.getId()));
-        Update update = new Update()
-                .set("status", TariffPublicationStatus.PENDING)
-                .set("attemptId", attemptId)
-                .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
-                .set("lastError", error)
-                .setOnInsert("countryCode", tariff.getCountryCode())
-                .setOnInsert("partyId", tariff.getPartyId())
-                .setOnInsert("tariffId", tariff.getId());
-        mongoTemplate.upsert(query, update, MongoTariffPublicationOutbox.class,
-                mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
-        return attemptId;
+    private Query publicationQuery(MongoTariffPublicationOutbox record) {
+        return Query.query(Criteria.where("countryCode").is(record.getCountryCode())
+                .and("partyId").is(record.getPartyId()).and("tariffId").is(record.getTariffId())
+                .and("attemptId").is(record.getAttemptId())
+                .and("tariffLastUpdated").is(record.getTariffLastUpdated()));
     }
 
-    /**
-     * Conditional transition to DELIVERED: it applies only while the record still carries the token
-     * of the attempt that is reporting success. A slow PUT whose tariff has since been re-published
-     * (and failed) therefore leaves the record PENDING for the retry loop instead of marking the
-     * newer, undelivered publication as delivered.
-     */
-    private void markPublicationDelivered(TariffDTO tariff, String attemptId) {
-        Query query = Query.query(Criteria.where("countryCode").is(tariff.getCountryCode())
-                .and("partyId").is(tariff.getPartyId())
-                .and("tariffId").is(tariff.getId())
-                .and("attemptId").is(attemptId));
-        Update update = new Update()
-                .set("status", TariffPublicationStatus.DELIVERED)
-                .set("lastAttemptAt", LocalDateTime.now(ZoneOffset.UTC))
-                .unset("lastError");
-        mongoTemplate.updateFirst(query, update, MongoTariffPublicationOutbox.class,
+    private void markPublicationDelivered(MongoTariffPublicationOutbox record) {
+        // An old PUT must never delete a newer revision's pending retry.
+        mongoTemplate.remove(publicationQuery(record), MongoTariffPublicationOutbox.class,
                 mongoCollectionMapper.getTariffPublicationOutboxCollectionName());
     }
 
