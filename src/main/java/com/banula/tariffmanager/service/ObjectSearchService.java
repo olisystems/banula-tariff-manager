@@ -12,8 +12,8 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.Instant;
+import java.time.Duration;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -26,8 +26,8 @@ public class ObjectSearchService {
 
     public record SearchPage(List<?> items, long total, int offset, int limit) {}
 
-    public SearchPage search(String module, String tenant, String id, String name,
-            String countryCode, String partyId, LocalDateTime dateFrom, LocalDateTime dateTo, int offset, int limit) {
+    public SearchPage search(String module, String id, String name,
+            String countryCode, String partyId, Instant dateFrom, Instant dateTo, int offset, int limit) {
         if (offset < 0 || limit < 1 || limit > 200) throw bad("offset must be nonnegative and limit must be 1–200");
         if (!Set.of("tariffs").contains(module)) throw bad("Unsupported object module");
         List<Criteria> filters = new ArrayList<>();
@@ -50,8 +50,8 @@ public class ObjectSearchService {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) throw bad("date_from must precede date_to");
         if (dateFrom != null || dateTo != null) {
             Criteria date = Criteria.where("lastUpdated");
-            if (dateFrom != null) date.gte(dateFrom);
-            if (dateTo != null) date.lte(dateTo);
+            if (dateFrom != null) date.gte(Date.from(dateFrom));
+            if (dateTo != null) date.lte(Date.from(dateTo));
             filters.add(date);
         }
 
@@ -63,8 +63,11 @@ public class ObjectSearchService {
     }
 
     private <M,D> SearchPage read(Query query, Class<M> entity, Class<D> dto, String collection, int offset, int limit) {
+        // Substring matching intentionally remains literal and case-insensitive.
+        // Scope/sort indexes reduce work; bound the residual scan on large datasets.
+        query.maxTime(Duration.ofSeconds(10));
         long total = mongo.count(query, entity, collection);
-        query.with(Sort.by(Sort.Order.desc("lastUpdated"), Sort.Order.asc("_id"))).skip(offset).limit(limit);
+        query.allowDiskUse(true).with(Sort.by(Sort.Order.desc("lastUpdated"), Sort.Order.asc("_id"))).skip(offset).limit(limit);
         List<D> items = mongo.find(query, entity, collection).stream().map(row -> mapper.toDTO(row, dto)).toList();
         return new SearchPage(items, total, offset, limit);
     }

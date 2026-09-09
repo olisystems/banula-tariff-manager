@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.format.annotation.DateTimeFormat;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
@@ -30,9 +29,9 @@ public class NonOcpiObjectSearchController {
             @RequestParam(value="date_to", required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME) OffsetDateTime dateTo,
             @RequestParam(value="offset", defaultValue="0") int offset,
             @RequestParam(value="limit", defaultValue="25") int limit) {
-        return search.search(module, null, id, name, countryCode, partyId,
-                dateFrom == null ? null : dateFrom.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime(),
-                dateTo == null ? null : dateTo.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime(), offset, limit);
+        return search.search(module, id, name, countryCode, partyId,
+                dateFrom == null ? null : dateFrom.toInstant(),
+                dateTo == null ? null : dateTo.toInstant(), offset, limit);
     }
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> invalidSearch(ResponseStatusException error) {
