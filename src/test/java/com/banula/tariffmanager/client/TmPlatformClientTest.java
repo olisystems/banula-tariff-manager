@@ -56,4 +56,22 @@ class TmPlatformClientTest {
         new TmPlatformClient(rest,config).getTariffs("DE","OLI",java.time.LocalDateTime.of(2026,1,1,0,0),java.time.LocalDateTime.of(2026,1,1,0,0,0,123456789));
         server.verify();
     }
+
+    @Test void pullsEveryHubPartyPageEvenWhenTheServerClampsThePageSize() {
+        var rest = new RestTemplate();
+        var server = MockRestServiceServer.createServer(rest);
+        var config = mock(ApplicationConfiguration.class);
+        when(config.getPlatformUrl()).thenReturn("http://platform");
+        when(config.getCountryCode()).thenReturn("DE");
+        when(config.getPartyId()).thenReturn("BAN");
+        for (int offset = 0; offset < 3; offset++) {
+            server.expect(requestTo("http://platform/api/v1/internal/outflow/ocpi/sender/2.2.1/hubclientinfo?offset=" + offset + "&limit=100"))
+                .andExpect(header("OCPI-to-country-code", "DE"))
+                .andExpect(header("OCPI-to-party-id", "BAN"))
+                .andRespond(withSuccess("{\"status_code\":1000,\"data\":" + (offset == 2 ? "[]" : "[{}]") + "}",
+                        MediaType.APPLICATION_JSON));
+        }
+        assertEquals(2, new TmPlatformClient(rest, config).getHubClientInfos().size());
+        server.verify();
+    }
 }

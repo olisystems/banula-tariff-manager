@@ -21,6 +21,8 @@ public class MongoTariffPublicationOutbox {
     private String partyId;
     private String tariffId;
     private TariffPublicationStatus status;
+    /** Fences responses and retries belonging to an older publication attempt. */
+    private String attemptId;
     private LocalDateTime lastAttemptAt;
     private String lastError;
     private int attempts;
