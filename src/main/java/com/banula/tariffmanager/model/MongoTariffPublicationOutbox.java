@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Document("#{@MongoCollectionMapper.getTariffPublicationOutboxCollectionName()}")
 @CompoundIndex(name = "unique_tariff_publication", def = "{'countryCode': 1, 'partyId': 1, 'tariffId': 1}", unique = true)
+@CompoundIndex(name = "pending_publication_due", def = "{'status': 1, 'nextAttemptAt': 1}")
 public class MongoTariffPublicationOutbox {
 
     @Id
@@ -20,8 +21,11 @@ public class MongoTariffPublicationOutbox {
     private String partyId;
     private String tariffId;
     private TariffPublicationStatus status;
-    /** Token of the publication attempt that last moved this record to PENDING; see TariffSyncServiceImpl. */
+    /** Fences responses and retries belonging to an older publication attempt. */
     private String attemptId;
     private LocalDateTime lastAttemptAt;
     private String lastError;
+    private int attempts;
+    private LocalDateTime nextAttemptAt;
+    private LocalDateTime tariffLastUpdated;
 }

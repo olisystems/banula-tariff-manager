@@ -1,6 +1,11 @@
 package com.banula.tariffmanager.controller.nonocpi;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.banula.tariffmanager.service.TariffSyncService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -29,6 +34,21 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class NonOcpiTMTariffController {
     private final TMTariffService tmTariffService;
+    private final TariffSyncService tariffSyncService;
+
+    @PostMapping("/sync")
+    public ResponseEntity<OcpiResponse<TariffSyncService.SyncResult>> syncTariffs(
+            @RequestParam("country_code") String countryCode,
+            @RequestParam("party_id") String partyId) {
+        countryCode = countryCode.trim().toUpperCase(Locale.ROOT);
+        partyId = partyId.trim().toUpperCase(Locale.ROOT);
+        if (!countryCode.matches("[A-Z]{2}") || !partyId.matches("[A-Z0-9]{3}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A two-letter country code and three-character CPO party ID are required");
+        }
+        return ResponseEntity.ok(new OcpiResponse<>(tariffSyncService.pullStoreAndBroadcast(countryCode, partyId, null, null)));
+    }
+
 
     @CrossOrigin
     @GetMapping("/{countryCode}/{partyId}/{datetime}")

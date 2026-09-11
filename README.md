@@ -159,3 +159,14 @@ Contributors:
 - [Matheus Rosendo](https://github.com/matheusrosendo)
 - [Diego Rosales](https://github.com/dv-rosales)
 - [Elton Saraci](https://github.com/EltonSaraci99)
+
+
+### Hub tariff publication retries
+
+Failed hub PUTs are retained in the publication outbox and retried when due. Each run
+loads at most `tariff-sync.publication-batch-size` records (default 100). Retries use
+`tariff-sync.publication-backoff-seconds` (default 3600), doubling after each attempt
+up to 24 hours. `tariff-sync.publication-max-attempts` (default 5) includes the first
+PUT; exhausted records become `FAILED` and stop retrying. Re-pulling the same tariff
+revision does not reset that budget. A changed `last_updated` starts a new budget.
+Successful delivery deletes its outbox record; pending and failed records are retained.
