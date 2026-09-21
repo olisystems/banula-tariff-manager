@@ -1,9 +1,6 @@
 oli-app:
   fullnameOverride: "tariff-manager-prod"
 
-  image:
-    tag: "v0.1.0"
-
   resources:
     requests:
       cpu: 100m
