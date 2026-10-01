@@ -5,6 +5,7 @@ metadata:
   namespace: argocd
   labels:
     repo: banula-tariff-manager
+    env: prod
 spec:
   project: banula
   source:
