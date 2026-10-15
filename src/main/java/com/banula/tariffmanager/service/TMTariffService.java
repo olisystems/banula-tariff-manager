@@ -21,7 +21,7 @@ public interface TMTariffService {
             Integer limit);
 
     List<TariffDTO> findTariffsBetweenDates(LocalDateTime dateFrom, LocalDateTime dateTo, Integer offset, Integer limit,
-            String countryCode, String partyId, String tariffId);
+            String countryCode, String partyId, String tariffId, Boolean byop);
 
     void deleteTariff(String countryCode, String partyId, String tariffId);
 }

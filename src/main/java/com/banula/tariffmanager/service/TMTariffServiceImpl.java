@@ -109,14 +109,17 @@ public class TMTariffServiceImpl implements TMTariffService {
             Integer offset,
             Integer limit) {
 
-        return findTariffsBetweenDates(dateFrom, dateTo, offset, limit, null, null, null);
+        return findTariffsBetweenDates(dateFrom, dateTo, offset, limit, null, null, null, null);
     }
 
     @Override
     public List<TariffDTO> findTariffsBetweenDates(LocalDateTime dateFrom, LocalDateTime dateTo, Integer offset, Integer limit,
-            String countryCode, String partyId, String tariffId) {
+            String countryCode, String partyId, String tariffId, Boolean byop) {
         try {
-            List<OnChainTariff> tariffs = tariffUtility.findTariffs(dateFrom, dateTo, offset, limit, countryCode, partyId, tariffId);
+            String byopEnergyProductName = Boolean.TRUE.equals(byop) ? applicationConfiguration.getEnergyProductName()
+                    : null;
+            List<OnChainTariff> tariffs = tariffUtility.findTariffs(dateFrom, dateTo, offset, limit, countryCode, partyId,
+                    tariffId, byopEnergyProductName);
 
             return tariffs.stream()
                     .map(TariffFactory::tariffToDto)

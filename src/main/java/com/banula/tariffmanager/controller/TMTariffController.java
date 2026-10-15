@@ -87,11 +87,13 @@ public class TMTariffController {
             @RequestParam(value = "limit", required = false) Integer limit,
             @RequestParam(value = "country_code", required = false) String countryCode,
             @RequestParam(value = "party_id", required = false) String partyId,
-            @RequestParam(value = "tariff_id", required = false) String tariffId) {
+            @RequestParam(value = "tariff_id", required = false) String tariffId,
+            @RequestParam(value = "byop", required = false) Boolean byop) {
 
-        log.info("Fetching tariffs dateFrom {}, dateTo {}, offset {}, limit {}", dateFrom, dateTo, offset, limit);
+        log.info("Fetching tariffs dateFrom {}, dateTo {}, offset {}, limit {}, byop {}", dateFrom, dateTo, offset, limit,
+                byop);
         return ResponseEntity
-                .ok(new OcpiResponse<>(tmTariffService.findTariffsBetweenDates(dateFrom, dateTo, offset, limit, countryCode, partyId, tariffId)));
+                .ok(new OcpiResponse<>(tmTariffService.findTariffsBetweenDates(dateFrom, dateTo, offset, limit, countryCode, partyId, tariffId, byop)));
     }
 
 }

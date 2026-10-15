@@ -13,7 +13,7 @@ class TariffUtilityTest {
     @Test void appliesLiteralSearchAndPartyBeforePagination() {
         var mongo = mock(MongoTemplate.class); var collections = mock(MongoCollectionMapper.class);
         when(collections.getTariffCollectionName()).thenReturn("tariffs");
-        new TariffUtility(mongo,collections).findTariffs(null,null,20,10,"de","oli","a.b+");
+        new TariffUtility(mongo,collections).findTariffs(null,null,20,10,"de","oli","a.b+",null);
         var query = ArgumentCaptor.forClass(Query.class);
         verify(mongo).find(query.capture(),eq(OnChainTariff.class),eq("tariffs"));
         var value = query.getValue();
@@ -22,5 +22,17 @@ class TariffUtilityTest {
         assertTrue(value.getQueryObject().toJson().contains("\\\\Qa.b+\\\\E"));
         assertEquals(20,value.getSkip()); assertEquals(10,value.getLimit());
         assertFalse(value.getSortObject().isEmpty());
+        assertFalse(value.getQueryObject().containsKey("energyMix.greenEnergy"));
+    }
+
+    @Test void byopKeepsOnlyGreenTariffsWithTheBanulaProduct() {
+        var mongo = mock(MongoTemplate.class); var collections = mock(MongoCollectionMapper.class);
+        when(collections.getTariffCollectionName()).thenReturn("tariffs");
+        new TariffUtility(mongo,collections).findTariffs(null,null,0,10,null,null,null,"BANULA_CPO_TARIFF");
+        var query = ArgumentCaptor.forClass(Query.class);
+        verify(mongo).find(query.capture(),eq(OnChainTariff.class),eq("tariffs"));
+        var filter = query.getValue().getQueryObject();
+        assertEquals(true,filter.get("energyMix.greenEnergy"));
+        assertEquals("BANULA_CPO_TARIFF",filter.get("energyMix.energyProductName"));
     }
 }
