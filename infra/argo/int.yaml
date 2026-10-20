@@ -10,12 +10,12 @@ spec:
   project: banula
   source:
     repoURL: https://github.com/olisystems/banula-tariff-manager.git
-    targetRevision: v1.3.1
+    targetRevision: v1.4.0
     path: infra/helm
     helm:
       parameters:
         - name: oli-app.image.tag
-          value: "v1.3.1"
+          value: "v1.4.0"
       valueFiles:
         - values.yaml
         - values.int.yaml
