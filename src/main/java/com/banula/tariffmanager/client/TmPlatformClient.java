@@ -4,6 +4,7 @@ import com.banula.openlib.ocpi.exception.OCPICustomException;
 import com.banula.openlib.ocpi.model.OcpiResponse;
 import com.banula.openlib.ocpi.model.dto.TariffDTO;
 import com.banula.openlib.ocpi.util.Constants;
+import com.banula.openlib.trace.TraceContext;
 import com.banula.tariffmanager.config.ApplicationConfiguration;
 import com.banula.tariffmanager.model.dto.HubClientInfoDTO;
 import lombok.AllArgsConstructor;
@@ -27,7 +28,6 @@ import java.util.HashSet;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 
 /**
  * Banula-platform client: SENDER pulls from parties, RECEIVER puts to the hub (DE/BAN) so the node
@@ -211,17 +211,17 @@ public class TmPlatformClient {
             String toPartyId,
             B body,
             ParameterizedTypeReference<OcpiResponse<T>> responseType) {
-        try {
+        try (TraceContext.Outgoing trace = TraceContext.outgoing()) {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.add("Accept", "*/*");
-            headers.set("X-Request-ID", UUID.randomUUID().toString());
-            headers.set("X-Correlation-ID", UUID.randomUUID().toString());
+            trace.applyTo(headers::set);
             headers.set("OCPI-to-country-code", toCountryCode);
             headers.set("OCPI-to-party-id", toPartyId);
             headers.set("OCPI-from-country-code", applicationConfiguration.getCountryCode());
             headers.set("OCPI-from-party-id", applicationConfiguration.getPartyId());
 
+            trace.log(method, url);
             return restTemplate.exchange(
                     url,
                     method,

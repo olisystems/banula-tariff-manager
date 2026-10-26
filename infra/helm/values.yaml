@@ -52,6 +52,13 @@ oli-app:
       secretKeyRef:
         name: mongodb-secret
         key: mongo_address
+    # Settings for the OpenTelemetry Java agent. The agent loads only where
+    # JDK_JAVA_OPTIONS attaches it (values.<env>.yaml).
+    OTEL_SERVICE_NAME: "banula-tariff-manager"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy.monitoring.svc:4318"
+    OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES: "correlation_id,request_id,out_request_id,ocpi_from,ocpi_to"
+    # Repository spans wrap each query 2-3 levels deep; the Mongo client spans already carry it.
+    OTEL_INSTRUMENTATION_SPRING_DATA_ENABLED: "false"
 
   resources:
     requests:
