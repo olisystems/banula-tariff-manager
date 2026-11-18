@@ -7,7 +7,7 @@ COPY src/ src/
 
 RUN mvn package -DskipTests
 
-FROM docker.io/eclipse-temurin:17-jre
+FROM docker.io/amazoncorretto:17.0.21-al2023-headless
 
 WORKDIR /app
 
